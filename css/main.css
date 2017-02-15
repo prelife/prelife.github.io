@@ -8,14 +8,26 @@
     margin: 0;
     padding: 0;
   }
+  table {
+    margin: 10mm auto 0 auto !important;
+  }
+  body {
+    bottom: 0;
+    left: 0;
+    margin: 0 auto !important;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 100% !important;
+  }
   html,
   body {
     overflow: hidden;
   }
   td {
     border-width: 1mm;
-    height: 2.7mm;
-    width: 2.7mm;
+    height: 2.6mm;
+    width: 2.6mm;
   }
   body {
     background: #fff !important;
@@ -24,7 +36,7 @@
   .row-1::after {
     color: #000;
     content: '----';
-    font-size: 2.7mm;
+    font-size: 2.6mm;
     position: absolute;
   }
   .content,
