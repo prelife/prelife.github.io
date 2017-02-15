@@ -337,7 +337,7 @@ td {
   }
 }
 
-@media all and (-ms-high-contrast: none) {
+@media screen and (-ms-high-contrast: active), (-ms-high-contrast: none) {
   .content-label-color input {
     float: none;
     opacity: 1;
