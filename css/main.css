@@ -329,7 +329,15 @@ td {
   width: 0;
 }
 
-@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+@media screen\0 {
+  .content-label-color input {
+    float: none;
+    opacity: 1;
+    width: 30%;
+  }
+}
+
+@media all and (-ms-high-contrast: none) {
   .content-label-color input {
     float: none;
     opacity: 1;
