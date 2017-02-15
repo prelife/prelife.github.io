@@ -1,8 +1,4 @@
 /* main.scss */
-.sprite {
-  background: url('data:image/svg+xml;base64,[data]');
-}
-
 @media print {
   @page {
     margin: 0;
@@ -329,6 +325,13 @@ td {
 .content-label-color input {
   float: left;
   opacity: 0;
+}
+
+@media screen\0 {
+  .content-label-color input {
+    float: none;
+    opacity: 1;
+  }
 }
 
 .content-label-submit {
