@@ -326,8 +326,14 @@ td {
   background: #000;
 }
 
+.content-label-color input {
+  float: left;
+  opacity: 0;
+}
+
 .content-label-submit {
-  display: none;
+  float: left;
+  opacity: 0;
 }
 
 .content-label-btn {
