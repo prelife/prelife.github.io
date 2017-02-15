@@ -314,8 +314,7 @@ td {
   background: #000;
 }
 
-.content-label-color input,
-.content-label-btn input {
+.content-label-submit {
   display: none;
 }
 
