@@ -323,14 +323,17 @@ td {
 }
 
 .content-label-color input {
+  border: 0;
   float: left;
   opacity: 0;
+  width: 0;
 }
 
 @media screen\0 {
   .content-label-color input {
     float: none;
     opacity: 1;
+    width: 50%;
   }
 }
 
