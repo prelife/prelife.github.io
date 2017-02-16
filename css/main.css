@@ -333,15 +333,29 @@ td {
   .content-label-color input {
     float: none;
     opacity: 1;
-    width: 30%;
+    width: auto;
   }
 }
 
-@media screen and (-ms-high-contrast: active), (-ms-high-contrast: none) {
+@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
   .content-label-color input {
     float: none;
     opacity: 1;
-    width: 30%;
+    width: auto;
+  }
+  .content-label-color input *::-ms-backdrop,
+  .content-label-color input {
+    float: none;
+    opacity: 1;
+    width: auto;
+  }
+}
+
+@supports (-ms-accelerator: true) {
+  .content-label-color input {
+    float: none;
+    opacity: 1;
+    width: auto;
   }
 }
 
@@ -360,7 +374,7 @@ td {
 }
 
 .test {
-  content: '';
+  /*content: '';*/
 }
 
 /*  main.less */
