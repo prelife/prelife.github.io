@@ -156,18 +156,12 @@
   <body>
     <div id="root"></div>
     <script type="text/babel">
-      const { useState, useEffect, useMemo, useRef, useCallback } = React;
+      const { useState, useEffect, useMemo, useRef } = React;
       const { LineChart, Line, ResponsiveContainer, YAxis } = (typeof Recharts !== 'undefined' ? Recharts : window.Recharts) || {};
       
       // Simple animation components using CSS transitions instead of framer-motion
-      const motion = {
-        div: ({ initial, animate, exit, transition, children, ...props }) => (
-            <div {...props}>{children}</div>
-        ),
-        tr: ({ initial, animate, exit, transition, children, ...props }) => (
-            <tr {...props}>{children}</tr>
-        )
-      };
+      const MotionDiv = ({ children, ...props }) => <div {...props}>{children}</div>;
+      const MotionTr = ({ children, ...props }) => <tr {...props}>{children}</tr>;
       const AnimatePresence = ({ children }) => <>{children}</>;
 
       const Icon = ({ name, size = 24, className = "" }) => {
@@ -548,7 +542,7 @@
           }
         };
 
-        const runClientSideAnalysis = useCallback(async (currentSettings, isAutoRefresh = false) => {
+        const runClientSideAnalysis = async (currentSettings, isAutoRefresh = false) => {
           if (!isMounted.current) return;
 
           const fetchId = ++lastFetchId.current;
@@ -706,14 +700,15 @@
             if (fetchId === lastFetchId.current && isMounted.current) {
               const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
               setError(errorMessage);
-              showToast('error', `Analysis failed: ${errorMessage}`);
+              setToast({ type: 'error', message: `Analysis failed: ${errorMessage}` });
+              setTimeout(() => setToast(null), 3000);
             }
           } finally {
             if (fetchId === lastFetchId.current && isMounted.current) {
               setLoading(false);
             }
           }
-        }, []);
+        };
 
         useEffect(() => {
           const timeoutId = setTimeout(() => {
@@ -768,30 +763,24 @@
           });
         }, [data, sortConfig, livePrices]);
 
-        // Toast notification handler with auto-dismiss
-        const showToast = useCallback((type, message) => {
-          setToast({ type, message });
-          setTimeout(() => setToast(null), 3000);
-        }, []);
-
-        const handleSort = useCallback((key) => {
+        const handleSort = (key) => {
           setSortConfig(prev => ({
             key,
             direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
           }));
-        }, []);
+        };
 
-        const formatCurrency = useCallback((value) => {
+        const formatCurrency = (value) => {
           if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
           if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
           return `$${value.toLocaleString()}`;
-        }, []);
+        };
 
-        const formatNumber = useCallback((value) => {
+        const formatNumber = (value) => {
           return `${(value / 1_000_000).toFixed(2)}M`;
-        }, []);
+        };
 
-        const getCorrColor = useCallback((val) => {
+        const getCorrColor = (val) => {
           const absVal = Math.abs(val);
           if (absVal < 50) {
             const intensity = (50 - absVal) / 50;
@@ -800,25 +789,25 @@
             const intensity = (absVal - 50) / 50;
             return theme === 'dark' ? `rgba(239, 68, 68, ${intensity * 0.3})` : `rgba(220, 38, 38, ${intensity * 0.2})`;
           }
-        }, [theme]);
+        };
 
-        const SortIcon = useCallback(({ column }) => {
+        const SortIcon = ({ column }) => {
           if (sortConfig.key !== column) return <ArrowUpDownIcon size={12} className="opacity-30" />;
           return sortConfig.direction === 'desc' ? <ArrowDownIcon size={12} /> : <ArrowUpIcon size={12} />;
-        }, [sortConfig.key]);
+        };
 
-        const saveSettings = useCallback((newSettings) => {
+        const saveSettings = (newSettings) => {
           setSettings(newSettings);
           setShowSettings(false);
-        }, []);
+        };
 
-        const copyToClipboard = useCallback((text) => {
+        const copyToClipboard = (text) => {
           navigator.clipboard.writeText(text);
           setToast({ type: 'success', message: `Copied ${text} to clipboard` });
           setTimeout(() => setToast(null), 3000);
-        }, []);
+        };
 
-        const addToBlacklist = useCallback((symbol) => {
+        const addToBlacklist = (symbol) => {
           setSettings(prev => {
             if (prev.blacklist.includes(symbol)) return prev;
             const newBlacklist = [...prev.blacklist, symbol];
@@ -835,16 +824,16 @@
 
           setToast({ type: 'success', message: `${symbol} added to blacklist` });
           setTimeout(() => setToast(null), 3000);
-        }, []);
+        };
 
-        const removeFromBlacklist = useCallback((symbol) => {
+        const removeFromBlacklist = (symbol) => {
           setSettings(prev => ({
             ...prev,
             blacklist: prev.blacklist.filter(s => s !== symbol)
           }));
-        }, []);
+        };
 
-        const exportToCSV = useCallback(() => {
+        const exportToCSV = () => {
           if (!data || sortedResults.length === 0) return;
 
           const headers = [
@@ -886,33 +875,28 @@
 
           setToast({ type: 'success', message: 'Exported analysis to CSV' });
           setTimeout(() => setToast(null), 3000);
-        }, [data, sortedResults, livePrices]);
+        };
 
         return (
           <div className="min-h-screen flex flex-col bg-bg text-text-main font-sans transition-colors duration-200">
-            <AnimatePresence>
-              {toast && (
-                <motion.div
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 50 }}
-                  className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-xl flex items-center gap-2 font-medium ${
-                    toast.type === 'error' 
-                      ? 'bg-down text-white' 
-                      : toast.type === 'success'
-                      ? 'bg-up text-white'
-                      : 'bg-accent text-white'
-                  }`}
-                >
-                  {toast.type === 'error' ? (
-                    <XIcon size={18} />
-                  ) : (
-                    <CheckCircle2Icon size={18} />
-                  )}
-                  {toast.message}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {toast && (
+              <MotionDiv
+                className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-xl flex items-center gap-2 font-medium ${
+                  toast.type === 'error' 
+                    ? 'bg-down text-white' 
+                    : toast.type === 'success'
+                    ? 'bg-up text-white'
+                    : 'bg-accent text-white'
+                }`}
+              >
+                {toast.type === 'error' ? (
+                  <XIcon size={18} />
+                ) : (
+                  <CheckCircle2Icon size={18} />
+                )}
+                {toast.message}
+              </MotionDiv>
+            )}
 
             <header className="bg-surface border-b-2 border-border px-8 py-6 flex justify-between items-center shadow-sm">
               <div className="flex items-center gap-3">
@@ -990,47 +974,40 @@
             </div>
 
             <main className="flex-1 p-8 flex flex-col gap-6 max-w-[1800px] mx-auto w-full">
-              <AnimatePresence>
-                {showStats && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0, marginBottom: 0 }}
-                    animate={{ height: 'auto', opacity: 1, marginBottom: 24 }}
-                    exit={{ height: 0, opacity: 0, marginBottom: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                      <div className="stat-card">
-                        <div className="stat-label flex items-center gap-2">
-                          <ActivityIcon size={14} />
-                          Rate Limit Usage
-                        </div>
-                        <div className="stat-value">Client-side</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-label flex items-center gap-2">
-                          <DatabaseIcon size={14} />
-                          Qualifying Symbols
-                        </div>
-                        <div className="stat-value">{data?.results.length || 0} Pairs</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-label flex items-center gap-2">
-                          <BarChart3Icon size={14} />
-                          BTC Reference Vol
-                        </div>
-                        <div className="stat-value">{data ? formatCurrency(data.btcVolume24h) : '---'}</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-label flex items-center gap-2">
-                          <ClockIcon size={14} />
-                          Last Execution
-                        </div>
-                        <div className="stat-value">{lastUpdate ? lastUpdate.toLocaleTimeString() : '---'}</div>
-                      </div>
+            {showStats && (
+              <div className="overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="stat-card">
+                    <div className="stat-label flex items-center gap-2">
+                      <ActivityIcon size={14} />
+                      Rate Limit Usage
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    <div className="stat-value">Client-side</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label flex items-center gap-2">
+                      <DatabaseIcon size={14} />
+                      Qualifying Symbols
+                    </div>
+                    <div className="stat-value">{data?.results.length || 0} Pairs</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label flex items-center gap-2">
+                      <BarChart3Icon size={14} />
+                      BTC Reference Vol
+                    </div>
+                    <div className="stat-value">{data ? formatCurrency(data.btcVolume24h) : '---'}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label flex items-center gap-2">
+                      <ClockIcon size={14} />
+                      Last Execution
+                    </div>
+                    <div className="stat-value">{lastUpdate ? lastUpdate.toLocaleTimeString() : '---'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
               <div className="table-container flex-1 min-h-[600px] shadow-sm">
                 <div className="overflow-x-auto">
@@ -1104,319 +1081,304 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <AnimatePresence>
-                        {loading && !data ? (
-                          <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <td colSpan={10} className="text-center py-20">
-                              <div className="flex flex-col items-center gap-4">
-                                <RefreshCwIcon className="animate-spin text-accent" size={32} />
-                                <p className="text-text-muted font-sans">Analyzing market data...</p>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ) : error ? (
-                          <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <td colSpan={10} className="text-center py-20">
-                              <div className="flex flex-col items-center gap-4 text-down">
-                                <InfoIcon size={32} />
-                                <p className="font-sans font-medium">{error}</p>
-                                <button
-                                  onClick={() => runClientSideAnalysis(settings)}
-                                  className="px-4 py-2 bg-accent text-white rounded-md text-sm font-sans hover:bg-blue-700 transition-colors"
-                                >
-                                  Retry Analysis
-                                </button>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ) : (
-                          sortedResults.map((row) => {
-                            const live = livePrices[row.symbol] || { price: row.price, change: row.change };
-                            return (
-                              <motion.tr
-                                key={row.symbol}
-                                layout
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                onClick={() => copyToClipboard(row.symbol)}
-                                className="hover:bg-[#F9FAFB] dark:hover:bg-gray-700/50 transition-colors group cursor-pointer"
+                      {loading && !data ? (
+                        <tr>
+                          <td colSpan={10} className="text-center py-20">
+                            <div className="flex flex-col items-center gap-4">
+                              <RefreshCwIcon className="animate-spin text-accent" size={32} />
+                              <p className="text-text-muted font-sans">Analyzing market data...</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : error ? (
+                        <tr>
+                          <td colSpan={10} className="text-center py-20">
+                            <div className="flex flex-col items-center gap-4 text-down">
+                              <InfoIcon size={32} />
+                              <p className="font-sans font-medium">{error}</p>
+                              <button
+                                onClick={() => runClientSideAnalysis(settings)}
+                                className="px-4 py-2 bg-accent text-white rounded-md text-sm font-sans hover:bg-blue-700 transition-colors"
                               >
-                                <td className="sym-col" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center justify-between gap-2 group/sym">
-                                    <div className="flex flex-col cursor-pointer" onClick={() => copyToClipboard(row.symbol)}>
-                                      <span className="dark:text-blue-400 flex items-center gap-2">
-                                        {row.symbol}
-                                        <CopyIcon size={12} className="opacity-0 group-hover/sym:opacity-50 transition-opacity" />
-                                      </span>
-                                    </div>
-                                    <button
-                                      onClick={() => addToBlacklist(row.symbol)}
-                                      className="p-1.5 hover:bg-red-500/10 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                      title="Add to Blacklist"
-                                    >
-                                      <BanIcon size={14} />
-                                    </button>
+                                Retry Analysis
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedResults.map((row) => {
+                          const live = livePrices[row.symbol] || { price: row.price, change: row.change };
+                          return (
+                            <MotionTr
+                              key={row.symbol}
+                              onClick={() => copyToClipboard(row.symbol)}
+                              className="hover:bg-[#F9FAFB] dark:hover:bg-gray-700/50 transition-colors group cursor-pointer"
+                            >
+                              <td className="sym-col" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between gap-2 group/sym">
+                                  <div className="flex flex-col cursor-pointer" onClick={() => copyToClipboard(row.symbol)}>
+                                    <span className="dark:text-blue-400 flex items-center gap-2">
+                                      {row.symbol}
+                                      <CopyIcon size={12} className="opacity-0 group-hover/sym:opacity-50 transition-opacity" />
+                                    </span>
                                   </div>
-                                </td>
-                                <td className={live.change >= 0 ? 'up' : 'down'}>
-                                  <div className="flex items-center gap-1 font-bold">
-                                    {live.change >= 0 ? <TrendingUpIcon size={14} /> : <TrendingDownIcon size={14} />}
-                                    {live.change >= 0 ? '+' : ''}{live.change.toFixed(2)}%
-                                  </div>
-                                </td>
-                                <td>{formatCurrency(row.volume)}</td>
-                                <td>{row.volumePct.toFixed(2)}%</td>
-                                <td>{formatNumber(row.trades)}</td>
-                                <td style={{ backgroundColor: getCorrColor(row.corr24h) }} className="font-bold">
-                                  {row.corr24h.toFixed(2)}%
-                                </td>
-                                <td style={{ backgroundColor: getCorrColor(row.corr1h) }} className="font-bold">
-                                  {row.corr1h.toFixed(2)}%
-                                </td>
-                                <td>{row.natr2h.toFixed(2)}%</td>
-                                <td>{row.vol6h.toFixed(2)}%</td>
-                                <td className="p-0">
-                                  <div className="h-10 w-full min-w-0 relative overflow-hidden">
-                                    {row.history.length > 0 && (
-                                      <ResponsiveContainer width="99%" height={40} minWidth={0}>
-                                        <LineChart data={row.history.map((v, i) => ({ v, i }))}>
-                                          <YAxis hide domain={['dataMin', 'dataMax']} />
-                                          <Line
-                                            type="monotone"
-                                            dataKey="v"
-                                            stroke={live.change >= 0 ? '#10B981' : '#EF4444'}
-                                            strokeWidth={1.5}
-                                            dot={false}
-                                            isAnimationActive={false}
-                                          />
-                                        </LineChart>
-                                      </ResponsiveContainer>
-                                    )}
-                                  </div>
-                                </td>
-                              </motion.tr>
-                            );
-                          })
-                        )}
-                      </AnimatePresence>
+                                  <button
+                                    onClick={() => addToBlacklist(row.symbol)}
+                                    className="p-1.5 hover:bg-red-500/10 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Add to Blacklist"
+                                  >
+                                    <BanIcon size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className={live.change >= 0 ? 'up' : 'down'}>
+                                <div className="flex items-center gap-1 font-bold">
+                                  {live.change >= 0 ? <TrendingUpIcon size={14} /> : <TrendingDownIcon size={14} />}
+                                  {live.change >= 0 ? '+' : ''}{live.change.toFixed(2)}%
+                                </div>
+                              </td>
+                              <td>{formatCurrency(row.volume)}</td>
+                              <td>{row.volumePct.toFixed(2)}%</td>
+                              <td>{formatNumber(row.trades)}</td>
+                              <td style={{ backgroundColor: getCorrColor(row.corr24h) }} className="font-bold">
+                                {row.corr24h.toFixed(2)}%
+                              </td>
+                              <td style={{ backgroundColor: getCorrColor(row.corr1h) }} className="font-bold">
+                                {row.corr1h.toFixed(2)}%
+                              </td>
+                              <td>{row.natr2h.toFixed(2)}%</td>
+                              <td>{row.vol6h.toFixed(2)}%</td>
+                              <td className="p-0">
+                                <div className="h-10 w-full min-w-0 relative overflow-hidden">
+                                  {row.history.length > 0 && (
+                                    <ResponsiveContainer width="99%" height={40} minWidth={0}>
+                                      <LineChart data={row.history.map((v, i) => ({ v, i }))}>
+                                        <YAxis hide domain={['dataMin', 'dataMax']} />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="v"
+                                          stroke={live.change >= 0 ? '#10B981' : '#EF4444'}
+                                          strokeWidth={1.5}
+                                          dot={false}
+                                          isAnimationActive={false}
+                                        />
+                                      </LineChart>
+                                    </ResponsiveContainer>
+                                  )}
+                                </div>
+                              </td>
+                            </MotionTr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
             </main>
 
-            <AnimatePresence>
-              {showAbout && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                    className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
-                  >
-                    <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800">
-                      <h2 className="text-lg font-bold flex items-center gap-2">
-                        <HelpCircleIcon size={18} />
-                        About Futures Analyzer
-                      </h2>
-                      <button onClick={() => setShowAbout(false)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
-                        <XIcon size={20} />
-                      </button>
-                    </div>
+            {showAbout && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                <MotionDiv
+                  className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+                >
+                  <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <HelpCircleIcon size={18} />
+                      About Futures Analyzer
+                    </h2>
+                    <button onClick={() => setShowAbout(false)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                      <XIcon size={20} />
+                    </button>
+                  </div>
 
-                    <div className="p-8 overflow-y-auto max-h-[70vh] flex flex-col gap-6 font-sans leading-relaxed">
+                  <div className="p-8 overflow-y-auto max-h-[70vh] flex flex-col gap-6 font-sans leading-relaxed">
+                    <section>
+                      <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Overview</h3>
+                      <p className="text-text-muted">
+                        This dashboard provides real-time analysis of Binance Futures markets. It helps traders identify coins that are moving independently of Bitcoin (low correlation) or showing high relative volatility.
+                      </p>
+                    </section>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <section>
-                        <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Overview</h3>
-                        <p className="text-text-muted">
-                          This dashboard provides real-time analysis of Binance Futures markets. It helps traders identify coins that are moving independently of Bitcoin (low correlation) or showing high relative volatility.
-                        </p>
+                        <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Key Features</h3>
+                        <ul className="list-disc list-inside text-sm text-text-muted flex flex-col gap-1">
+                          <li><b>Live WebSocket:</b> Real-time price and change updates.</li>
+                          <li><b>BTC Correlation:</b> Pearson coefficient over 24h and 1h.</li>
+                          <li><b>Volatility:</b> NATR (2h) and Parkinson's Realized Vol (6h).</li>
+                          <li><b>Quick Copy:</b> Click any row to copy the symbol name.</li>
+                        </ul>
                       </section>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <section>
-                          <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Key Features</h3>
-                          <ul className="list-disc list-inside text-sm text-text-muted flex flex-col gap-1">
-                            <li><b>Live WebSocket:</b> Real-time price and change updates.</li>
-                            <li><b>BTC Correlation:</b> Pearson coefficient over 24h and 1h.</li>
-                            <li><b>Volatility:</b> NATR (2h) and Parkinson's Realized Vol (6h).</li>
-                            <li><b>Quick Copy:</b> Click any row to copy the symbol name.</li>
-                          </ul>
-                        </section>
-                        <section>
-                          <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Color Coding</h3>
-                          <ul className="list-disc list-inside text-sm text-text-muted flex flex-col gap-1">
-                            <li><span className="text-up font-bold">Green Correlation:</span> Low coupling with BTC (Independent).</li>
-                            <li><span className="text-down font-bold">Red Correlation:</span> High coupling with BTC (Coupled).</li>
-                            <li><span className="text-up font-bold">Green Change:</span> Price is increasing.</li>
-                          </ul>
-                        </section>
-                      </div>
-
-                      <section className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-border">
-                        <h3 className="font-bold mb-2 text-sm">How to use:</h3>
-                        <p className="text-sm text-text-muted">
-                          1. Use <b>Settings</b> to filter by minimum volume or trades.<br/>
-                          2. <b>Sort</b> columns to find the most volatile or independent coins.<br/>
-                          3. <b>Click a row</b> to quickly copy the symbol for your trading platform.<br/>
-                          4. Watch the <b>Sparklines</b> for immediate trend direction.
-                        </p>
+                      <section>
+                        <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Color Coding</h3>
+                        <ul className="list-disc list-inside text-sm text-text-muted flex flex-col gap-1">
+                          <li><span className="text-up font-bold">Green Correlation:</span> Low coupling with BTC (Independent).</li>
+                          <li><span className="text-down font-bold">Red Correlation:</span> High coupling with BTC (Coupled).</li>
+                          <li><span className="text-up font-bold">Green Change:</span> Price is increasing.</li>
+                        </ul>
                       </section>
-
-                      <div className="flex justify-center pt-2">
-                        <button
-                          onClick={() => setShowAbout(false)}
-                          className="px-8 py-2 bg-accent text-white rounded-lg font-bold hover:bg-blue-700 transition-colors"
-                        >
-                          Got it!
-                        </button>
-                      </div>
                     </div>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
 
-            <AnimatePresence>
-              {showSettings && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-                  >
-                    <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800">
-                      <h2 className="text-lg font-bold flex items-center gap-2">
-                        <SettingsIcon size={18} />
-                        Analyzer Settings
-                      </h2>
-                      <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
-                        <XIcon size={20} />
+                    <section className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-border">
+                      <h3 className="font-bold mb-2 text-sm">How to use:</h3>
+                      <p className="text-sm text-text-muted">
+                        1. Use <b>Settings</b> to filter by minimum volume or trades.<br/>
+                        2. <b>Sort</b> columns to find the most volatile or independent coins.<br/>
+                        3. <b>Click a row</b> to quickly copy the symbol for your trading platform.<br/>
+                        4. Watch the <b>Sparklines</b> for immediate trend direction.
+                      </p>
+                    </section>
+
+                    <div className="flex justify-center pt-2">
+                      <button
+                        onClick={() => setShowAbout(false)}
+                        className="px-8 py-2 bg-accent text-white rounded-lg font-bold hover:bg-blue-700 transition-colors"
+                      >
+                        Got it!
                       </button>
                     </div>
+                  </div>
+                </MotionDiv>
+              </div>
+            )}
 
-                    <div className="p-6 flex flex-col gap-5">
+            {showSettings && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                <MotionDiv
+                  className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                >
+                  <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <SettingsIcon size={18} />
+                      Analyzer Settings
+                    </h2>
+                    <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                      <XIcon size={20} />
+                    </button>
+                  </div>
+
+                  <div className="p-6 flex flex-col gap-5">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 24h Volume (USDT)</label>
+                      <input
+                        type="number"
+                        value={settings.minVol}
+                        onChange={(e) => setSettings(s => ({ ...s, minVol: parseInt(e.target.value) || 0 }))}
+                        className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 24h Trades</label>
+                      <input
+                        type="number"
+                        value={settings.minTrades}
+                        onChange={(e) => setSettings(s => ({ ...s, minTrades: parseInt(e.target.value) || 0 }))}
+                        className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 24h Volume (USDT)</label>
+                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 2h NATR (%)</label>
                         <input
                           type="number"
-                          value={settings.minVol}
-                          onChange={(e) => setSettings(s => ({ ...s, minVol: parseInt(e.target.value) || 0 }))}
+                          step="0.1"
+                          value={settings.minNATR}
+                          onChange={(e) => setSettings(s => ({ ...s, minNATR: parseFloat(e.target.value) || 0 }))}
                           className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
                         />
                       </div>
-
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 24h Trades</label>
+                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 6h Parkinson (%)</label>
                         <input
                           type="number"
-                          value={settings.minTrades}
-                          onChange={(e) => setSettings(s => ({ ...s, minTrades: parseInt(e.target.value) || 0 }))}
+                          step="0.1"
+                          value={settings.minVol6h}
+                          onChange={(e) => setSettings(s => ({ ...s, minVol6h: parseFloat(e.target.value) || 0 }))}
                           className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
                         />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-2">
-                          <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 2h NATR (%)</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={settings.minNATR}
-                            onChange={(e) => setSettings(s => ({ ...s, minNATR: parseFloat(e.target.value) || 0 }))}
-                            className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 6h Parkinson (%)</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={settings.minVol6h}
-                            onChange={(e) => setSettings(s => ({ ...s, minVol6h: parseFloat(e.target.value) || 0 }))}
-                            className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                          Full Re-Analysis Interval (Minutes)
-                          <div className="group relative">
-                            <InfoIcon size={12} className="cursor-help" />
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                              Frequency for recalculating complex metrics (Correlation, Volatility) and discovering new symbols.
-                            </div>
-                          </div>
-                        </label>
-                        <input
-                          type="number"
-                          value={settings.interval}
-                          onChange={(e) => setSettings(s => ({ ...s, interval: parseInt(e.target.value) || 1 }))}
-                          className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-3">
-                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Symbol Blacklist</label>
-                        <div className="flex flex-wrap gap-2 p-3 bg-bg border border-border rounded-lg min-h-[100px] max-h-[200px] overflow-y-auto">
-                          {settings.blacklist.map(symbol => (
-                            <div
-                              key={symbol}
-                              className="flex items-center gap-1.5 px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-[11px] font-mono group"
-                            >
-                              <span>{symbol}</span>
-                              <button
-                                onClick={() => removeFromBlacklist(symbol)}
-                                className="text-text-muted hover:text-red-500 transition-colors"
-                              >
-                                <XIcon size={10} />
-                              </button>
-                            </div>
-                          ))}
-                          {settings.blacklist.length === 0 && (
-                            <span className="text-text-muted text-xs italic">No symbols blacklisted</span>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="PRESS ENTER TO ADD SYMBOL..."
-                          className="w-full bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm uppercase focus:ring-2 focus:ring-accent outline-none"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const val = e.currentTarget.value.trim().toUpperCase();
-                              if (val) {
-                                addToBlacklist(val);
-                                e.currentTarget.value = '';
-                              }
-                            }
-                          }}
-                        />
-                        <p className="text-[10px] text-text-muted italic opacity-60">Hidden symbols won't appear in analysis. Useful for stables or majors.</p>
-                      </div>
-
-                      <div className="flex gap-3 mt-2">
-                        <button
-                          onClick={() => {
-                            setSettings(DEFAULT_SETTINGS);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-gray-700 text-text-main py-3 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                        >
-                          <RotateCcwIcon size={16} />
-                          Reset
-                        </button>
-                        <button
-                          onClick={() => saveSettings(settings)}
-                          className="flex-[2] bg-accent text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-accent/20"
-                        >
-                          Apply & Refresh
-                        </button>
                       </div>
                     </div>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+                        Full Re-Analysis Interval (Minutes)
+                        <div className="group relative">
+                          <InfoIcon size={12} className="cursor-help" />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            Frequency for recalculating complex metrics (Correlation, Volatility) and discovering new symbols.
+                          </div>
+                        </div>
+                      </label>
+                      <input
+                        type="number"
+                        value={settings.interval}
+                        onChange={(e) => setSettings(s => ({ ...s, interval: parseInt(e.target.value) || 1 }))}
+                        className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Symbol Blacklist</label>
+                      <div className="flex flex-wrap gap-2 p-3 bg-bg border border-border rounded-lg min-h-[100px] max-h-[200px] overflow-y-auto">
+                        {settings.blacklist.map(symbol => (
+                          <div
+                            key={symbol}
+                            className="flex items-center gap-1.5 px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-[11px] font-mono group"
+                          >
+                            <span>{symbol}</span>
+                            <button
+                              onClick={() => removeFromBlacklist(symbol)}
+                              className="text-text-muted hover:text-red-500 transition-colors"
+                            >
+                              <XIcon size={10} />
+                            </button>
+                          </div>
+                        ))}
+                        {settings.blacklist.length === 0 && (
+                          <span className="text-text-muted text-xs italic">No symbols blacklisted</span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="PRESS ENTER TO ADD SYMBOL..."
+                        className="w-full bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm uppercase focus:ring-2 focus:ring-accent outline-none"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = e.currentTarget.value.trim().toUpperCase();
+                            if (val) {
+                              addToBlacklist(val);
+                              e.currentTarget.value = '';
+                            }
+                          }
+                        }}
+                      />
+                      <p className="text-[10px] text-text-muted italic opacity-60">Hidden symbols won't appear in analysis. Useful for stables or majors.</p>
+                    </div>
+
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => {
+                          setSettings(DEFAULT_SETTINGS);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-gray-700 text-text-main py-3 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        <RotateCcwIcon size={16} />
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => saveSettings(settings)}
+                        className="flex-[2] bg-accent text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-accent/20"
+                      >
+                        Apply & Refresh
+                      </button>
+                    </div>
+                  </div>
+                </MotionDiv>
+              </div>
+            )}
 
             <footer className="bg-text-main text-white px-8 py-4 flex justify-between items-center text-sm">
               <div className="flex items-center gap-4">
