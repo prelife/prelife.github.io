@@ -814,7 +814,8 @@
 
         const copyToClipboard = useCallback((text) => {
           navigator.clipboard.writeText(text);
-          showToast('success', `Copied ${text} to clipboard`);
+          setToast({ type: 'success', message: `Copied ${text} to clipboard` });
+          setTimeout(() => setToast(null), 3000);
         }, []);
 
         const addToBlacklist = useCallback((symbol) => {
@@ -832,7 +833,8 @@
             };
           });
 
-          showToast('success', `${symbol} added to blacklist`);
+          setToast({ type: 'success', message: `${symbol} added to blacklist` });
+          setTimeout(() => setToast(null), 3000);
         }, []);
 
         const removeFromBlacklist = useCallback((symbol) => {
@@ -882,8 +884,9 @@
           link.click();
           document.body.removeChild(link);
 
-          showToast('success', 'Exported analysis to CSV');
-        };
+          setToast({ type: 'success', message: 'Exported analysis to CSV' });
+          setTimeout(() => setToast(null), 3000);
+        }, [data, sortedResults, livePrices]);
 
         return (
           <div className="min-h-screen flex flex-col bg-bg text-text-main font-sans transition-colors duration-200">
