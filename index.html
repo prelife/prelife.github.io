@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Binance Futures Analyzer - Serverless</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+            },
+            colors: {
+              bg: { DEFAULT: '#F0F2F5' },
+              surface: { DEFAULT: '#FFFFFF' },
+              border: { DEFAULT: '#D1D5DB' },
+              'text-main': { DEFAULT: '#111827' },
+              'text-muted': { DEFAULT: '#6B7280' },
+              accent: { DEFAULT: '#2563EB' },
+              up: { DEFAULT: '#059669' },
+              down: { DEFAULT: '#DC2626' },
+            },
+          },
+        },
+      }
+    </script>
+    <style>
+      :root {
+        --color-bg: #F0F2F5;
+        --color-surface: #FFFFFF;
+        --color-border: #D1D5DB;
+        --color-text-main: #111827;
+        --color-text-muted: #6B7280;
+      }
+
+      .dark {
+        --color-bg: #0F172A;
+        --color-surface: #1E293B;
+        --color-border: #334155;
+        --color-text-main: #F8FAFC;
+        --color-text-muted: #94A3B8;
+      }
+
+      body {
+        font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+        background-color: var(--color-bg);
+        color: var(--color-text-main);
+        transition: background-color 0.2s, color 0.2s;
+      }
+
+      .stat-card {
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        padding: 1rem;
+        border-radius: 0.5rem;
+      }
+
+      .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--color-text-muted);
+        margin-bottom: 0.25rem;
+      }
+
+      .stat-value {
+        font-size: 1.125rem;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+      }
+
+      .table-container {
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      th {
+        background-color: #F9FAFB;
+        border-bottom: 1px solid var(--color-border);
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--color-text-muted);
+      }
+
+      .dark th {
+        background-color: #1e293b;
+      }
+
+      td {
+        padding: 0.625rem 1rem;
+        border-bottom: 1px solid #F3F4F6;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 0.85rem;
+      }
+
+      .dark td {
+        border-bottom-color: #334155;
+      }
+
+      .sym-col {
+        font-weight: 600;
+        color: var(--color-accent);
+        font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .up {
+        color: var(--color-up);
+      }
+
+      .down {
+        color: var(--color-down);
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #CBD5E1;
+        border-radius: 4px;
+      }
+
+      .dark ::-webkit-scrollbar-thumb {
+        background: #475569;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94A3B8;
+      }
+    </style>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useRef, useCallback } = React;
+      const { motion, AnimatePresence } = (typeof Motion !== 'undefined' ? Motion : window.Motion) || {};
+      const { LineChart, Line, ResponsiveContainer, YAxis } = (typeof Recharts !== 'undefined' ? Recharts : window.Recharts) || {};
+
+      const Icon = ({ name, size = 24, className = "" }) => {
+        const ref = useRef(null);
+        useEffect(() => {
+          if (ref.current && (window.lucide || window.Lucide)) {
+            const lib = window.lucide || window.Lucide;
+            lib.createIcons({ root: ref.current });
+          }
+        }, [name]);
+        return <i ref={ref} data-lucide={name} width={size} height={size} className={className}></i>;
+      };
+
+      const ActivityIcon = (props) => <Icon name="activity" {...props} />;
+      const BarChart3Icon = (props) => <Icon name="bar-chart-3" {...props} />;
+      const ClockIcon = (props) => <Icon name="clock" {...props} />;
+      const DatabaseIcon = (props) => <Icon name="database" {...props} />;
+      const RefreshCwIcon = (props) => <Icon name="refresh-cw" {...props} />;
+      const TrendingUpIcon = (props) => <Icon name="trending-up" {...props} />;
+      const TrendingDownIcon = (props) => <Icon name="trending-down" {...props} />;
+      const InfoIcon = (props) => <Icon name="info" {...props} />;
+      const ArrowUpDownIcon = (props) => <Icon name="arrow-up-down" {...props} />;
+      const ArrowUpIcon = (props) => <Icon name="arrow-up" {...props} />;
+      const ArrowDownIcon = (props) => <Icon name="arrow-down" {...props} />;
+      const ZapIcon = (props) => <Icon name="zap" {...props} />;
+      const SettingsIcon = (props) => <Icon name="settings" {...props} />;
+      const XIcon = (props) => <Icon name="x" {...props} />;
+      const SunIcon = (props) => <Icon name="sun" {...props} />;
+      const MoonIcon = (props) => <Icon name="moon" {...props} />;
+      const HelpCircleIcon = (props) => <Icon name="help-circle" {...props} />;
+      const CopyIcon = (props) => <Icon name="copy" {...props} />;
+      const CheckCircle2Icon = (props) => <Icon name="check-circle-2" {...props} />;
+      const DownloadIcon = (props) => <Icon name="download" {...props} />;
+      const RotateCcwIcon = (props) => <Icon name="rotate-ccw" {...props} />;
+      const BanIcon = (props) => <Icon name="ban" {...props} />;
+
+      const correlation = (x, y) => {
+        const n = x.length;
+        if (n !== y.length || n < 2) return 0;
+
+        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+        for (let i = 0; i < n; i++) {
+          const xi = x[i];
+          const yi = y[i];
+          sumX += xi;
+          sumY += yi;
+          sumXY += xi * yi;
+          sumX2 += xi * xi;
+          sumY2 += yi * yi;
+        }
+
+        const numerator = n * sumXY - sumX * sumY;
+        const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+        if (denominator === 0) return 0;
+        return Math.max(-1, Math.min(1, numerator / denominator));
+      };
+
+      const calculateReturns = (closes) => {
+        if (closes.length < 2) return [];
+        const returns = new Float64Array(closes.length - 1);
+        for (let i = 1; i < closes.length; i++) {
+          returns[i - 1] = Math.log(closes[i] / closes[i - 1]);
+        }
+        return Array.from(returns);
+      };
+
+      const calculateATR = (highs, lows, closes, period = 14) => {
+        if (closes.length < period + 1) return 0;
+
+        const tr = new Float64Array(closes.length - 1);
+        for (let i = 1; i < closes.length; i++) {
+          const h = highs[i];
+          const l = lows[i];
+          const cPrev = closes[i - 1];
+          tr[i - 1] = Math.max(h - l, Math.abs(h - cPrev), Math.abs(l - cPrev));
+        }
+
+        let sum = 0;
+        for (let i = 0; i < period; i++) sum += tr[i];
+        let atr = sum / period;
+
+        for (let i = period; i < tr.length; i++) {
+          atr = (atr * (period - 1) + tr[i]) / period;
+        }
+        return atr;
+      };
+
+      const calculateNATR = (highs, lows, closes, period = 14) => {
+        if (closes.length < period + 1) return 0;
+        const atr = calculateATR(highs, lows, closes, period);
+        const lastClose = closes[closes.length - 1];
+        return lastClose > 0 ? (atr / lastClose) * 100 : 0;
+      };
+
+      const calculateParkinsonVolatility = (highs, lows, period = 14) => {
+        const n = Math.min(period, highs.length, lows.length);
+        if (n < 2) return 0;
+
+        let sumSquaredLogRange = 0;
+        let validCount = 0;
+
+        for (let i = 0; i < n; i++) {
+          if (highs[i] > 0 && lows[i] > 0 && highs[i] >= lows[i]) {
+            sumSquaredLogRange += Math.pow(Math.log(highs[i] / lows[i]), 2);
+            validCount++;
+          }
+        }
+
+        if (validCount === 0) return 0;
+
+        const k = 4 * Math.log(2);
+        const variance = sumSquaredLogRange / (k * validCount);
+        return Math.sqrt(variance) * 100;
+      };
+
+      const BINANCE_BASE = 'https://fapi.binance.com/fapi/v1';
+      const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const fetchKlines = async (symbol, interval, limit) => {
+        try {
+          const response = await fetch(`${BINANCE_BASE}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+          if (!response.ok) {
+            if (response.status === 418 || response.status === 429) {
+              throw new Error('Binance Rate Limit');
+            }
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const data = await response.json();
+          return data.map(k => ({
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+            volume: parseFloat(k[5])
+          }));
+        } catch (error) {
+          console.error(`Error fetching klines for ${symbol}:`, error.message);
+          return [];
+        }
+      };
+
+      const DEFAULT_SETTINGS = {
+        minVol: 80000000,
+        minTrades: 600000,
+        minNATR: 0,
+        minVol6h: 0,
+        interval: 5,
+        blacklist: ['ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT', 'ADAUSDT', 'DOGEUSDT']
+      };
+
+      function App() {
+        const [data, setData] = useState(null);
+        const [livePrices, setLivePrices] = useState({});
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const [lastUpdate, setLastUpdate] = useState(null);
+        const [nextUpdate, setNextUpdate] = useState(null);
+        const [sortConfig, setSortConfig] = useState({ key: 'change', direction: 'desc' });
+        const [showSettings, setShowSettings] = useState(false);
+        const [showAbout, setShowAbout] = useState(false);
+        const [showStats, setShowStats] = useState(false);
+        const [theme, setTheme] = useState(() => {
+          return localStorage.getItem('binance_analyzer_theme') || 'dark';
+        });
+        const [toast, setToast] = useState(null);
+
+        const [settings, setSettings] = useState(() => {
+          const saved = localStorage.getItem('binance_analyzer_settings');
+          if (saved) {
+            try {
+              return JSON.parse(saved);
+            } catch (e) {
+              console.error('Failed to parse saved settings', e);
+            }
+          }
+          return DEFAULT_SETTINGS;
+        });
+
+        useEffect(() => {
+          localStorage.setItem('binance_analyzer_theme', theme);
+        }, [theme]);
+
+        useEffect(() => {
+          localStorage.setItem('binance_analyzer_settings', JSON.stringify(settings));
+        }, [settings]);
+
+        const wsRef = useRef(null);
+        const isMounted = useRef(true);
+        const lastFetchId = useRef(0);
+
+        useEffect(() => {
+          isMounted.current = true;
+          return () => {
+            isMounted.current = false;
+          };
+        }, []);
+
+        const connectWebSocket = (symbols) => {
+          if (wsRef.current) {
+            try {
+              wsRef.current.onclose = null;
+              wsRef.current.onerror = null;
+              wsRef.current.onmessage = null;
+              wsRef.current.onopen = null;
+              if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+                wsRef.current.close();
+              }
+            } catch (e) {}
+          }
+
+          if (symbols.length === 0 || !isMounted.current) return;
+
+          const streams = symbols.map(s => `${s.toLowerCase()}@ticker`).join('/');
+          const wsUrl = `wss://fstream.binance.com/stream?streams=${streams}`;
+
+          try {
+            const ws = new WebSocket(wsUrl);
+
+            ws.onmessage = (event) => {
+              if (!isMounted.current) return;
+              try {
+                const msg = JSON.parse(event.data);
+                const ticker = msg.data || msg;
+                if (ticker.s && ticker.c && ticker.P) {
+                  setLivePrices(prev => ({
+                    ...prev,
+                    [ticker.s]: {
+                      price: parseFloat(ticker.c),
+                      change: parseFloat(ticker.P)
+                    }
+                  }));
+                }
+              } catch (e) {
+                console.error('Error parsing WS message:', e);
+              }
+            };
+
+            ws.onopen = () => {
+              if (isMounted.current) console.log('WebSocket connected successfully');
+            };
+
+            ws.onclose = (e) => {
+              if (isMounted.current) {
+                console.log(`WebSocket closed (code: ${e.code}). Reconnecting in 5s...`);
+                setTimeout(() => {
+                  if (isMounted.current) connectWebSocket(symbols);
+                }, 5000);
+              }
+            };
+
+            ws.onerror = (err) => {
+              if (isMounted.current) console.error('WebSocket error details:', err);
+            };
+
+            wsRef.current = ws;
+          } catch (e) {
+            console.error('Failed to create WebSocket:', e);
+          }
+        };
+
+        const runClientSideAnalysis = useCallback(async (currentSettings, isAutoRefresh = false) => {
+          if (!isMounted.current) return;
+
+          const fetchId = ++lastFetchId.current;
+          if (!isAutoRefresh) setLoading(true);
+          setError(null);
+
+          try {
+            console.log(`Starting fresh analysis (MinVol: ${currentSettings.minVol}, MinTrades: ${currentSettings.minTrades})...`);
+
+            const [infoRes, tickerRes] = await Promise.all([
+              fetch(`${BINANCE_BASE}/exchangeInfo`),
+              fetch(`${BINANCE_BASE}/ticker/24hr`)
+            ]);
+
+            const infoData = await infoRes.json();
+            const tickerData = await tickerRes.json();
+
+            const symbolsStatus = infoData.symbols.reduce((acc, s) => {
+              acc[s.symbol] = s.status;
+              return acc;
+            }, {});
+
+            const btcTicker = tickerData.find((t) => t.symbol === 'BTCUSDT');
+            const btcVolume24h = parseFloat(btcTicker?.quoteVolume || '0');
+
+            const [btcKlines24h, btcKlines1h] = await Promise.all([
+              fetchKlines('BTCUSDT', '30m', 50),
+              fetchKlines('BTCUSDT', '5m', 15)
+            ]);
+
+            const btcCloses24h = btcKlines24h.map(k => k.close);
+            const btcReturns24h = calculateReturns(btcCloses24h);
+            const btcCloses1h = btcKlines1h.map(k => k.close);
+            const btcReturns1h = calculateReturns(btcCloses1h);
+
+            const filteredSymbols = tickerData.filter((t) => {
+              const vol = parseFloat(t.quoteVolume);
+              const trades = parseInt(t.count);
+              return t.symbol.endsWith('USDT') &&
+                     /^[A-Z0-9]+$/.test(t.symbol) &&
+                     !currentSettings.blacklist.some(b => t.symbol === b || t.symbol === b + 'USDT') &&
+                     vol >= currentSettings.minVol &&
+                     trades >= currentSettings.minTrades &&
+                     symbolsStatus[t.symbol] === 'TRADING';
+            });
+
+            const symbolsToAnalyze = filteredSymbols
+              .sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent));
+
+            const results = [];
+            for (const t of symbolsToAnalyze) {
+              const symbol = t.symbol;
+              const isBTC = symbol === 'BTCUSDT';
+
+              let klines30m, klines5m, klines1h;
+              if (isBTC) {
+                klines30m = btcKlines24h;
+                klines5m = btcKlines1h;
+                klines1h = await fetchKlines(symbol, '1h', 8);
+              } else {
+                [klines30m, klines5m, klines1h] = await Promise.all([
+                  fetchKlines(symbol, '30m', 50),
+                  fetchKlines(symbol, '5m', 15),
+                  fetchKlines(symbol, '1h', 8)
+                ]);
+                await delay(50);
+              }
+
+              const symReturns24h = calculateReturns(klines30m.map(k => k.close));
+              const symReturns1h = calculateReturns(klines5m.map(k => k.close));
+
+              const minLen24h = Math.min(symReturns24h.length, btcReturns24h.length);
+              const corr24h = isBTC ? 1 : (minLen24h >= 30 ? correlation(symReturns24h.slice(-minLen24h), btcReturns24h.slice(-minLen24h)) : 0);
+
+              const minLen1h = Math.min(symReturns1h.length, btcReturns1h.length);
+              const corr1h = isBTC ? 1 : (minLen1h >= 10 ? correlation(symReturns1h.slice(-minLen1h), btcReturns1h.slice(-minLen1h)) : 0);
+
+              const natr2h = calculateNATR(klines30m.map(k => k.high), klines30m.map(k => k.low), klines30m.map(k => k.close), 4);
+              const vol6h = calculateParkinsonVolatility(klines1h.map(k => k.high), klines1h.map(k => k.low), 7);
+
+              results.push({
+                symbol,
+                change: parseFloat(t.priceChangePercent),
+                price: parseFloat(t.lastPrice),
+                volume: parseFloat(t.quoteVolume),
+                volumePct: (parseFloat(t.quoteVolume) / btcVolume24h) * 100,
+                trades: parseInt(t.count),
+                corr24h: corr24h * 100,
+                corr1h: corr1h * 100,
+                natr2h,
+                vol6h,
+                history: klines1h.map(k => k.close)
+              });
+            }
+
+            const finalData = {
+              timestamp: new Date().toISOString(),
+              btcVolume24h,
+              results: results
+                .filter(r => r.natr2h >= currentSettings.minNATR && r.vol6h >= currentSettings.minVol6h)
+                .sort((a, b) => b.change - a.change)
+            };
+
+            if (fetchId !== lastFetchId.current || !isMounted.current) return;
+
+            setData(finalData);
+
+            const initialPrices = {};
+            finalData.results.forEach((r) => {
+              initialPrices[r.symbol] = { price: r.price, change: r.change };
+            });
+            setLivePrices(initialPrices);
+
+            const now = new Date();
+            setLastUpdate(now);
+            setNextUpdate(new Date(now.getTime() + currentSettings.interval * 60 * 1000));
+            setError(null);
+
+            connectWebSocket(finalData.results.map((r) => r.symbol));
+          } catch (err) {
+            if (fetchId === lastFetchId.current && isMounted.current) {
+              setError(err instanceof Error ? err.message : 'An unknown error occurred');
+            }
+          } finally {
+            if (fetchId === lastFetchId.current && isMounted.current) {
+              setLoading(false);
+            }
+          }
+        }, []);
+
+        useEffect(() => {
+          const timeoutId = setTimeout(() => {
+            runClientSideAnalysis(settings, false);
+          }, 1000);
+
+          const intervalId = setInterval(() => runClientSideAnalysis(settings, true), settings.interval * 60 * 1000);
+
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+
+          return () => {
+            clearTimeout(timeoutId);
+            clearInterval(intervalId);
+            if (wsRef.current) {
+              wsRef.current.onclose = null;
+              wsRef.current.onerror = null;
+              wsRef.current.close();
+            }
+          };
+        }, [settings, theme]);
+
+        const sortedResults = useMemo(() => {
+          if (!data) return [];
+
+          return [...data.results].sort((a, b) => {
+            let aVal = a[sortConfig.key];
+            let bVal = b[sortConfig.key];
+
+            if (sortConfig.key === 'change') aVal = livePrices[a.symbol]?.change ?? a.change;
+            if (sortConfig.key === 'change') bVal = livePrices[b.symbol]?.change ?? b.change;
+
+            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+          });
+        }, [data, sortConfig, livePrices]);
+
+        const handleSort = (key) => {
+          setSortConfig(prev => ({
+            key,
+            direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+          }));
+        };
+
+        const formatCurrency = (value) => {
+          if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
+          if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+          return `$${value.toLocaleString()}`;
+        };
+
+        const formatNumber = (value) => {
+          return `${(value / 1_000_000).toFixed(2)}M`;
+        };
+
+        const getCorrColor = (val) => {
+          const absVal = Math.abs(val);
+          if (absVal < 50) {
+            const intensity = (50 - absVal) / 50;
+            return theme === 'dark' ? `rgba(16, 185, 129, ${intensity * 0.3})` : `rgba(5, 150, 105, ${intensity * 0.2})`;
+          } else {
+            const intensity = (absVal - 50) / 50;
+            return theme === 'dark' ? `rgba(239, 68, 68, ${intensity * 0.3})` : `rgba(220, 38, 38, ${intensity * 0.2})`;
+          }
+        };
+
+        const SortIcon = ({ column }) => {
+          if (sortConfig.key !== column) return <ArrowUpDownIcon size={12} className="opacity-30" />;
+          return sortConfig.direction === 'desc' ? <ArrowDownIcon size={12} /> : <ArrowUpIcon size={12} />;
+        };
+
+        const saveSettings = (newSettings) => {
+          setSettings(newSettings);
+          setShowSettings(false);
+        };
+
+        const copyToClipboard = (text) => {
+          navigator.clipboard.writeText(text);
+          setToast(`Copied ${text} to clipboard`);
+          setTimeout(() => setToast(null), 2000);
+        };
+
+        const addToBlacklist = (symbol) => {
+          setSettings(prev => {
+            if (prev.blacklist.includes(symbol)) return prev;
+            const newBlacklist = [...prev.blacklist, symbol];
+            return { ...prev, blacklist: newBlacklist };
+          });
+
+          setData(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              results: prev.results.filter(r => r.symbol !== symbol)
+            };
+          });
+
+          setToast(`${symbol} added to blacklist`);
+          setTimeout(() => setToast(null), 2000);
+        };
+
+        const removeFromBlacklist = (symbol) => {
+          setSettings(prev => ({
+            ...prev,
+            blacklist: prev.blacklist.filter(s => s !== symbol)
+          }));
+        };
+
+        const exportToCSV = () => {
+          if (!data || sortedResults.length === 0) return;
+
+          const headers = [
+            'Symbol', 'Price', 'Change %', 'Volume (USDT)',
+            'Volume vs BTC %', 'Trades', '24h BTC Corr %',
+            '1h BTC Corr %', '2h NATR %', '6h Parkinson %'
+          ];
+
+          const rows = sortedResults.map(row => {
+            const live = livePrices[row.symbol] || { price: row.price, change: row.change };
+            return [
+              row.symbol,
+              live.price,
+              live.change.toFixed(2),
+              row.volume.toFixed(2),
+              row.volumePct.toFixed(2),
+              (row.trades / 1_000_000).toFixed(2) + 'M',
+              row.corr24h.toFixed(2),
+              row.corr1h.toFixed(2),
+              row.natr2h.toFixed(2),
+              row.vol6h.toFixed(2)
+            ];
+          });
+
+          const csvContent = [
+            headers.join(','),
+            ...rows.map(r => r.join(','))
+          ].join('\n');
+
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.setAttribute('href', url);
+          link.setAttribute('download', `futures_analysis_${new Date().toISOString().split('T')[0]}.csv`);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          setToast('Exported analysis to CSV');
+          setTimeout(() => setToast(null), 2000);
+        };
+
+        return (
+          <div className="min-h-screen flex flex-col bg-bg text-text-main font-sans transition-colors duration-200">
+            <AnimatePresence>
+              {toast && (
+                <motion.div
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 50 }}
+                  className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-accent text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2 font-medium"
+                >
+                  <CheckCircle2Icon size={18} />
+                  {toast}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <header className="bg-surface border-b-2 border-border px-8 py-6 flex justify-between items-center shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-accent rounded flex items-center justify-center text-white font-bold">
+                  B
+                </div>
+                <h1 className="text-xl font-bold tracking-tight">
+                  Futures Analyzer <span className="font-light opacity-50">v3.8 Serverless</span>
+                </h1>
+                {data && (
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-accent/10 text-accent text-[10px] font-bold uppercase rounded border border-accent/20">
+                    {data.results.length} Symbols
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowAbout(true)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-text-muted hover:text-text-main"
+                  title="Help & About"
+                >
+                  <HelpCircleIcon size={20} />
+                </button>
+                <button
+                  onClick={() => setShowStats(!showStats)}
+                  className={`p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors ${showStats ? 'text-accent' : 'text-text-muted hover:text-text-main'}`}
+                  title={showStats ? "Hide Stats" : "Show Stats"}
+                >
+                  <BarChart3Icon size={20} />
+                </button>
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Toggle Theme"
+                >
+                  {theme === 'dark' ? <SunIcon size={20} /> : <MoonIcon size={20} />}
+                </button>
+                <button
+                  onClick={() => runClientSideAnalysis(settings)}
+                  disabled={loading}
+                  className={`p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors ${loading ? 'animate-spin text-accent' : 'text-text-muted hover:text-text-main'}`}
+                  title="Refresh Analysis Now"
+                >
+                  <RefreshCwIcon size={20} />
+                </button>
+                <button
+                  onClick={exportToCSV}
+                  disabled={!data || loading}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-text-muted hover:text-text-main disabled:opacity-30"
+                  title="Export to CSV"
+                >
+                  <DownloadIcon size={20} />
+                </button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Settings"
+                >
+                  <SettingsIcon size={20} />
+                </button>
+                <div className="hidden md:flex items-center gap-2 text-sm font-mono bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-3 py-1 rounded-full border border-green-200 dark:border-green-800">
+                  <ZapIcon size={14} className="fill-current" />
+                  <span>LIVE_WS</span>
+                </div>
+              </div>
+            </header>
+
+            <div className="flex flex-wrap gap-x-8 gap-y-2 bg-[#E5E7EB] dark:bg-gray-800 px-8 py-2 border-b border-border text-[0.75rem] font-mono text-text-muted">
+              <div className="flex gap-1">MIN_VOL: <b className="text-text-main">{formatCurrency(settings.minVol)}</b></div>
+              <div className="flex gap-1">MIN_TRADES: <b className="text-text-main">{(settings.minTrades / 1_000_000).toFixed(2)}M</b></div>
+              <div className="flex gap-1">MIN_NATR: <b className="text-text-main">{settings.minNATR}%</b></div>
+              <div className="flex gap-1">MIN_VOL6H: <b className="text-text-main">{settings.minVol6h}%</b></div>
+              <div className="flex gap-1">RE-ANALYSIS: <b className="text-text-main">{settings.interval}m</b></div>
+              <div className="flex gap-1">BLACKLIST: <b className="text-text-main">{settings.blacklist.length} coins</b></div>
+            </div>
+
+            <main className="flex-1 p-8 flex flex-col gap-6 max-w-[1800px] mx-auto w-full">
+              <AnimatePresence>
+                {showStats && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+                    animate={{ height: 'auto', opacity: 1, marginBottom: 24 }}
+                    exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="stat-card">
+                        <div className="stat-label flex items-center gap-2">
+                          <ActivityIcon size={14} />
+                          Rate Limit Usage
+                        </div>
+                        <div className="stat-value">Client-side</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label flex items-center gap-2">
+                          <DatabaseIcon size={14} />
+                          Qualifying Symbols
+                        </div>
+                        <div className="stat-value">{data?.results.length || 0} Pairs</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label flex items-center gap-2">
+                          <BarChart3Icon size={14} />
+                          BTC Reference Vol
+                        </div>
+                        <div className="stat-value">{data ? formatCurrency(data.btcVolume24h) : '---'}</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label flex items-center gap-2">
+                          <ClockIcon size={14} />
+                          Last Execution
+                        </div>
+                        <div className="stat-value">{lastUpdate ? lastUpdate.toLocaleTimeString() : '---'}</div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="table-container flex-1 min-h-[600px] shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th
+                          className="w-[140px] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('symbol')}
+                          title="The trading pair symbol. Click a row to copy."
+                        >
+                          <div className="flex items-center gap-2">Trading Symbol <SortIcon column="symbol" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('change')}
+                          title="24-hour price change percentage."
+                        >
+                          <div className="flex items-center gap-2">Price Change % <SortIcon column="change" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('volume')}
+                          title="Total quote volume in USDT over the last 24 hours."
+                        >
+                          <div className="flex items-center gap-2">24h Quote Volume <SortIcon column="volume" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('volumePct')}
+                          title="Volume relative to Bitcoin's 24h volume."
+                        >
+                          <div className="flex items-center gap-2">Volume vs BTC % <SortIcon column="volumePct" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('trades')}
+                          title="Number of trades executed in the last 24 hours."
+                        >
+                          <div className="flex items-center gap-2">24h Trade Count <SortIcon column="trades" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('corr24h')}
+                          title="Pearson correlation with BTC over 24 hours. Green = Low Correlation."
+                        >
+                          <div className="flex items-center gap-2">24h BTC Correlation <SortIcon column="corr24h" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('corr1h')}
+                          title="Pearson correlation with BTC over the last hour."
+                        >
+                          <div className="flex items-center gap-2">1h BTC Correlation <SortIcon column="corr1h" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('natr2h')}
+                          title="Normalized Average True Range over 2 hours (Volatility measure)."
+                        >
+                          <div className="flex items-center gap-2">2h NATR Volatility <SortIcon column="natr2h" /></div>
+                        </th>
+                        <th
+                          className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSort('vol6h')}
+                          title="Parkinson's Realized Volatility over 6 hours."
+                        >
+                          <div className="flex items-center gap-2">6h Parkinson Volatility <SortIcon column="vol6h" /></div>
+                        </th>
+                        <th className="w-[100px]" title="1-hour price history sparkline.">Price Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <AnimatePresence>
+                        {loading && !data ? (
+                          <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                            <td colSpan={10} className="text-center py-20">
+                              <div className="flex flex-col items-center gap-4">
+                                <RefreshCwIcon className="animate-spin text-accent" size={32} />
+                                <p className="text-text-muted font-sans">Analyzing market data...</p>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        ) : error ? (
+                          <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                            <td colSpan={10} className="text-center py-20">
+                              <div className="flex flex-col items-center gap-4 text-down">
+                                <InfoIcon size={32} />
+                                <p className="font-sans font-medium">{error}</p>
+                                <button
+                                  onClick={() => runClientSideAnalysis(settings)}
+                                  className="px-4 py-2 bg-accent text-white rounded-md text-sm font-sans hover:bg-blue-700 transition-colors"
+                                >
+                                  Retry Analysis
+                                </button>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        ) : (
+                          sortedResults.map((row) => {
+                            const live = livePrices[row.symbol] || { price: row.price, change: row.change };
+                            return (
+                              <motion.tr
+                                key={row.symbol}
+                                layout
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                onClick={() => copyToClipboard(row.symbol)}
+                                className="hover:bg-[#F9FAFB] dark:hover:bg-gray-700/50 transition-colors group cursor-pointer"
+                              >
+                                <td className="sym-col" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-between gap-2 group/sym">
+                                    <div className="flex flex-col cursor-pointer" onClick={() => copyToClipboard(row.symbol)}>
+                                      <span className="dark:text-blue-400 flex items-center gap-2">
+                                        {row.symbol}
+                                        <CopyIcon size={12} className="opacity-0 group-hover/sym:opacity-50 transition-opacity" />
+                                      </span>
+                                    </div>
+                                    <button
+                                      onClick={() => addToBlacklist(row.symbol)}
+                                      className="p-1.5 hover:bg-red-500/10 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Add to Blacklist"
+                                    >
+                                      <BanIcon size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className={live.change >= 0 ? 'up' : 'down'}>
+                                  <div className="flex items-center gap-1 font-bold">
+                                    {live.change >= 0 ? <TrendingUpIcon size={14} /> : <TrendingDownIcon size={14} />}
+                                    {live.change >= 0 ? '+' : ''}{live.change.toFixed(2)}%
+                                  </div>
+                                </td>
+                                <td>{formatCurrency(row.volume)}</td>
+                                <td>{row.volumePct.toFixed(2)}%</td>
+                                <td>{formatNumber(row.trades)}</td>
+                                <td style={{ backgroundColor: getCorrColor(row.corr24h) }} className="font-bold">
+                                  {row.corr24h.toFixed(2)}%
+                                </td>
+                                <td style={{ backgroundColor: getCorrColor(row.corr1h) }} className="font-bold">
+                                  {row.corr1h.toFixed(2)}%
+                                </td>
+                                <td>{row.natr2h.toFixed(2)}%</td>
+                                <td>{row.vol6h.toFixed(2)}%</td>
+                                <td className="p-0">
+                                  <div className="h-10 w-full min-w-0 relative overflow-hidden">
+                                    {row.history.length > 0 && (
+                                      <ResponsiveContainer width="99%" height={40} minWidth={0}>
+                                        <LineChart data={row.history.map((v, i) => ({ v, i }))}>
+                                          <YAxis hide domain={['dataMin', 'dataMax']} />
+                                          <Line
+                                            type="monotone"
+                                            dataKey="v"
+                                            stroke={live.change >= 0 ? '#10B981' : '#EF4444'}
+                                            strokeWidth={1.5}
+                                            dot={false}
+                                            isAnimationActive={false}
+                                          />
+                                        </LineChart>
+                                      </ResponsiveContainer>
+                                    )}
+                                  </div>
+                                </td>
+                              </motion.tr>
+                            );
+                          })
+                        )}
+                      </AnimatePresence>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </main>
+
+            <AnimatePresence>
+              {showAbout && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+                  >
+                    <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                      <h2 className="text-lg font-bold flex items-center gap-2">
+                        <HelpCircleIcon size={18} />
+                        About Futures Analyzer
+                      </h2>
+                      <button onClick={() => setShowAbout(false)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                        <XIcon size={20} />
+                      </button>
+                    </div>
+
+                    <div className="p-8 overflow-y-auto max-h-[70vh] flex flex-col gap-6 font-sans leading-relaxed">
+                      <section>
+                        <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Overview</h3>
+                        <p className="text-text-muted">
+                          This dashboard provides real-time analysis of Binance Futures markets. It helps traders identify coins that are moving independently of Bitcoin (low correlation) or showing high relative volatility.
+                        </p>
+                      </section>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <section>
+                          <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Key Features</h3>
+                          <ul className="list-disc list-inside text-sm text-text-muted flex flex-col gap-1">
+                            <li><b>Live WebSocket:</b> Real-time price and change updates.</li>
+                            <li><b>BTC Correlation:</b> Pearson coefficient over 24h and 1h.</li>
+                            <li><b>Volatility:</b> NATR (2h) and Parkinson's Realized Vol (6h).</li>
+                            <li><b>Quick Copy:</b> Click any row to copy the symbol name.</li>
+                          </ul>
+                        </section>
+                        <section>
+                          <h3 className="text-accent font-bold mb-2 uppercase text-xs tracking-widest">Color Coding</h3>
+                          <ul className="list-disc list-inside text-sm text-text-muted flex flex-col gap-1">
+                            <li><span className="text-up font-bold">Green Correlation:</span> Low coupling with BTC (Independent).</li>
+                            <li><span className="text-down font-bold">Red Correlation:</span> High coupling with BTC (Coupled).</li>
+                            <li><span className="text-up font-bold">Green Change:</span> Price is increasing.</li>
+                          </ul>
+                        </section>
+                      </div>
+
+                      <section className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-border">
+                        <h3 className="font-bold mb-2 text-sm">How to use:</h3>
+                        <p className="text-sm text-text-muted">
+                          1. Use <b>Settings</b> to filter by minimum volume or trades.<br/>
+                          2. <b>Sort</b> columns to find the most volatile or independent coins.<br/>
+                          3. <b>Click a row</b> to quickly copy the symbol for your trading platform.<br/>
+                          4. Watch the <b>Sparklines</b> for immediate trend direction.
+                        </p>
+                      </section>
+
+                      <div className="flex justify-center pt-2">
+                        <button
+                          onClick={() => setShowAbout(false)}
+                          className="px-8 py-2 bg-accent text-white rounded-lg font-bold hover:bg-blue-700 transition-colors"
+                        >
+                          Got it!
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showSettings && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                  >
+                    <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                      <h2 className="text-lg font-bold flex items-center gap-2">
+                        <SettingsIcon size={18} />
+                        Analyzer Settings
+                      </h2>
+                      <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                        <XIcon size={20} />
+                      </button>
+                    </div>
+
+                    <div className="p-6 flex flex-col gap-5">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 24h Volume (USDT)</label>
+                        <input
+                          type="number"
+                          value={settings.minVol}
+                          onChange={(e) => setSettings(s => ({ ...s, minVol: parseInt(e.target.value) || 0 }))}
+                          className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 24h Trades</label>
+                        <input
+                          type="number"
+                          value={settings.minTrades}
+                          onChange={(e) => setSettings(s => ({ ...s, minTrades: parseInt(e.target.value) || 0 }))}
+                          className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 2h NATR (%)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={settings.minNATR}
+                            onChange={(e) => setSettings(s => ({ ...s, minNATR: parseFloat(e.target.value) || 0 }))}
+                            className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Min 6h Parkinson (%)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={settings.minVol6h}
+                            onChange={(e) => setSettings(s => ({ ...s, minVol6h: parseFloat(e.target.value) || 0 }))}
+                            className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+                          Full Re-Analysis Interval (Minutes)
+                          <div className="group relative">
+                            <InfoIcon size={12} className="cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                              Frequency for recalculating complex metrics (Correlation, Volatility) and discovering new symbols.
+                            </div>
+                          </div>
+                        </label>
+                        <input
+                          type="number"
+                          value={settings.interval}
+                          onChange={(e) => setSettings(s => ({ ...s, interval: parseInt(e.target.value) || 1 }))}
+                          className="bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent outline-none"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-3">
+                        <label className="text-xs font-bold uppercase tracking-wider text-text-muted">Symbol Blacklist</label>
+                        <div className="flex flex-wrap gap-2 p-3 bg-bg border border-border rounded-lg min-h-[100px] max-h-[200px] overflow-y-auto">
+                          {settings.blacklist.map(symbol => (
+                            <div
+                              key={symbol}
+                              className="flex items-center gap-1.5 px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-[11px] font-mono group"
+                            >
+                              <span>{symbol}</span>
+                              <button
+                                onClick={() => removeFromBlacklist(symbol)}
+                                className="text-text-muted hover:text-red-500 transition-colors"
+                              >
+                                <XIcon size={10} />
+                              </button>
+                            </div>
+                          ))}
+                          {settings.blacklist.length === 0 && (
+                            <span className="text-text-muted text-xs italic">No symbols blacklisted</span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="PRESS ENTER TO ADD SYMBOL..."
+                          className="w-full bg-bg border border-border rounded-lg px-3 py-2 font-mono text-sm uppercase focus:ring-2 focus:ring-accent outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const val = e.currentTarget.value.trim().toUpperCase();
+                              if (val) {
+                                addToBlacklist(val);
+                                e.currentTarget.value = '';
+                              }
+                            }
+                          }}
+                        />
+                        <p className="text-[10px] text-text-muted italic opacity-60">Hidden symbols won't appear in analysis. Useful for stables or majors.</p>
+                      </div>
+
+                      <div className="flex gap-3 mt-2">
+                        <button
+                          onClick={() => {
+                            setSettings(DEFAULT_SETTINGS);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-gray-700 text-text-main py-3 rounded-lg font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                        >
+                          <RotateCcwIcon size={16} />
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => saveSettings(settings)}
+                          className="flex-[2] bg-accent text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-accent/20"
+                        >
+                          Apply & Refresh
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            <footer className="bg-text-main text-white px-8 py-4 flex justify-between items-center text-sm">
+              <div className="flex items-center gap-4">
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCwIcon size={14} className="animate-spin" />
+                    Updating analysis...
+                  </span>
+                ) : (
+                  <span>
+                    💤 Next full analysis: <b>{nextUpdate ? nextUpdate.toLocaleTimeString() : '---'}</b>
+                  </span>
+                )}
+                <div className="h-4 w-px bg-white/20" />
+                <span className="opacity-60">WebSocket: <b>Connected</b></span>
+              </div>
+              <div className="opacity-70 font-mono">
+                Serverless | Client-side Analysis | Direct Binance API
+              </div>
+            </footer>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
