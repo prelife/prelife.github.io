@@ -151,15 +151,24 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="text/babel">
       const { useState, useEffect, useMemo, useRef, useCallback } = React;
-      const { motion, AnimatePresence } = (typeof Motion !== 'undefined' ? Motion : window.Motion) || {};
       const { LineChart, Line, ResponsiveContainer, YAxis } = (typeof Recharts !== 'undefined' ? Recharts : window.Recharts) || {};
+      
+      // Simple animation components using CSS transitions instead of framer-motion
+      const motion = {
+        div: ({ initial, animate, exit, transition, children, ...props }) => (
+            <div {...props}>{children}</div>
+        ),
+        tr: ({ initial, animate, exit, transition, children, ...props }) => (
+            <tr {...props}>{children}</tr>
+        )
+      };
+      const AnimatePresence = ({ children }) => <>{children}</>;
 
       const Icon = ({ name, size = 24, className = "" }) => {
         const ref = useRef(null);
