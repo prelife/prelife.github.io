@@ -276,18 +276,79 @@
       };
 
       const BINANCE_BASE = 'https://fapi.binance.com/fapi/v1';
+      
+      // Rate limiting configuration
+      const RATE_LIMIT_CONFIG = {
+        baseDelay: 100,
+        maxDelay: 5000,
+        maxRetries: 5,
+        weightPerRequest: 1,
+        maxWeightPerSecond: 1200
+      };
+
       const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-      const fetchKlines = async (symbol, interval, limit) => {
+      // Exponential backoff with jitter
+      const calculateBackoff = (attempt, baseDelay = RATE_LIMIT_CONFIG.baseDelay, maxDelay = RATE_LIMIT_CONFIG.maxDelay) => {
+        const exponentialDelay = baseDelay * Math.pow(2, attempt);
+        const jitter = Math.random() * 0.3 * exponentialDelay;
+        return Math.min(exponentialDelay + jitter, maxDelay);
+      };
+
+      // Fetch with retry logic and rate limit handling
+      const fetchWithRetry = async (url, options = {}, attempt = 0) => {
         try {
-          const response = await fetch(`${BINANCE_BASE}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+          const response = await fetch(url, options);
+          
           if (!response.ok) {
             if (response.status === 418 || response.status === 429) {
-              throw new Error('Binance Rate Limit');
+              const retryAfter = parseInt(response.headers.get('Retry-After')) || calculateBackoff(attempt);
+              
+              if (attempt >= RATE_LIMIT_CONFIG.maxRetries) {
+                throw new Error(`Rate limit exceeded after ${RATE_LIMIT_CONFIG.maxRetries} retries`);
+              }
+              
+              console.warn(`Rate limited. Retrying in ${Math.round(retryAfter)}ms (attempt ${attempt + 1}/${RATE_LIMIT_CONFIG.maxRetries})`);
+              await delay(retryAfter);
+              return fetchWithRetry(url, options, attempt + 1);
             }
-            throw new Error(`HTTP ${response.status}`);
+            
+            if (response.status >= 500 && response.status < 600) {
+              if (attempt >= RATE_LIMIT_CONFIG.maxRetries) {
+                throw new Error(`Server error ${response.status} after ${RATE_LIMIT_CONFIG.maxRetries} retries`);
+              }
+              
+              const retryDelay = calculateBackoff(attempt, 500, 10000);
+              console.warn(`Server error ${response.status}. Retrying in ${Math.round(retryDelay)}ms`);
+              await delay(retryDelay);
+              return fetchWithRetry(url, options, attempt + 1);
+            }
+            
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
+          
+          return response;
+        } catch (error) {
+          if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            if (attempt >= RATE_LIMIT_CONFIG.maxRetries) {
+              throw new Error('Network error: Unable to connect to Binance API');
+            }
+            const retryDelay = calculateBackoff(attempt, 1000, 10000);
+            console.warn(`Network error. Retrying in ${Math.round(retryDelay)}ms`);
+            await delay(retryDelay);
+            return fetchWithRetry(url, options, attempt + 1);
+          }
+          throw error;
+        }
+      };
+
+      const fetchKlines = async (symbol, interval, limit, abortSignal = null) => {
+        const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        
+        try {
+          const response = await fetchWithRetry(url, { signal: abortSignal });
           const data = await response.json();
+          
           return data.map(k => ({
             open: parseFloat(k[1]),
             high: parseFloat(k[2]),
@@ -296,9 +357,34 @@
             volume: parseFloat(k[5])
           }));
         } catch (error) {
+          if (error.name === 'AbortError') {
+            console.log(`Fetch aborted for ${symbol}`);
+            return [];
+          }
           console.error(`Error fetching klines for ${symbol}:`, error.message);
           return [];
         }
+      };
+
+      // Batch fetch klines with controlled concurrency
+      const fetchKlinesBatch = async (requests, concurrencyLimit = 5) => {
+        const results = [];
+        const executing = new Set();
+        
+        for (const req of requests) {
+          const promise = fetchKlines(req.symbol, req.interval, req.limit, req.abortSignal)
+            .then(result => ({ ...req, result }))
+            .finally(() => executing.delete(promise));
+          
+          results.push(promise);
+          executing.add(promise);
+          
+          if (executing.size >= concurrencyLimit) {
+            await Promise.race(executing);
+          }
+        }
+        
+        return Promise.all(results);
       };
 
       const DEFAULT_SETTINGS = {
@@ -349,25 +435,41 @@
         const wsRef = useRef(null);
         const isMounted = useRef(true);
         const lastFetchId = useRef(0);
+        const abortControllerRef = useRef(null);
 
         useEffect(() => {
           isMounted.current = true;
           return () => {
             isMounted.current = false;
+            // Cancel any pending fetch requests on unmount
+            if (abortControllerRef.current) {
+              abortControllerRef.current.abort();
+            }
           };
         }, []);
 
         const connectWebSocket = (symbols) => {
+          // Clear any pending reconnection timeouts
+          if (wsRef.current?.reconnectTimeout) {
+            clearTimeout(wsRef.current.reconnectTimeout);
+            wsRef.current.reconnectTimeout = null;
+          }
+
           if (wsRef.current) {
             try {
+              // Remove all event handlers to prevent memory leaks
               wsRef.current.onclose = null;
               wsRef.current.onerror = null;
               wsRef.current.onmessage = null;
               wsRef.current.onopen = null;
+              
               if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-                wsRef.current.close();
+                wsRef.current.close(1000, 'Reconnecting');
               }
-            } catch (e) {}
+            } catch (e) {
+              console.warn('Error closing WebSocket:', e);
+            }
+            wsRef.current = null;
           }
 
           if (symbols.length === 0 || !isMounted.current) return;
@@ -377,6 +479,8 @@
 
           try {
             const ws = new WebSocket(wsUrl);
+            ws.reconnectAttempts = 0;
+            ws.maxReconnectAttempts = 5;
 
             ws.onmessage = (event) => {
               if (!isMounted.current) return;
@@ -398,20 +502,35 @@
             };
 
             ws.onopen = () => {
-              if (isMounted.current) console.log('WebSocket connected successfully');
+              if (isMounted.current) {
+                console.log('WebSocket connected successfully');
+                ws.reconnectAttempts = 0;
+              }
             };
 
             ws.onclose = (e) => {
-              if (isMounted.current) {
-                console.log(`WebSocket closed (code: ${e.code}). Reconnecting in 5s...`);
-                setTimeout(() => {
+              if (!isMounted.current) return;
+              
+              console.log(`WebSocket closed (code: ${e.code}, reason: ${e.reason}).`);
+              
+              // Only reconnect if not intentionally closed and under max attempts
+              if (e.code !== 1000 && ws.reconnectAttempts < ws.maxReconnectAttempts) {
+                ws.reconnectAttempts++;
+                const delayTime = Math.min(1000 * Math.pow(2, ws.reconnectAttempts), 30000);
+                console.log(`Reconnecting in ${delayTime}ms (attempt ${ws.reconnectAttempts}/${ws.maxReconnectAttempts})...`);
+                
+                ws.reconnectTimeout = setTimeout(() => {
                   if (isMounted.current) connectWebSocket(symbols);
-                }, 5000);
+                }, delayTime);
+              } else if (ws.reconnectAttempts >= ws.maxReconnectAttempts) {
+                console.warn('Max WebSocket reconnection attempts reached. Please refresh the page.');
               }
             };
 
             ws.onerror = (err) => {
-              if (isMounted.current) console.error('WebSocket error details:', err);
+              if (isMounted.current) {
+                console.error('WebSocket error:', err);
+              }
             };
 
             wsRef.current = ws;
@@ -424,15 +543,24 @@
           if (!isMounted.current) return;
 
           const fetchId = ++lastFetchId.current;
+          
+          // Abort any pending fetch requests
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+          }
+          abortControllerRef.current = new AbortController();
+          const abortSignal = abortControllerRef.current.signal;
+
           if (!isAutoRefresh) setLoading(true);
           setError(null);
 
           try {
             console.log(`Starting fresh analysis (MinVol: ${currentSettings.minVol}, MinTrades: ${currentSettings.minTrades})...`);
 
+            // Use retry-enabled fetch for initial data
             const [infoRes, tickerRes] = await Promise.all([
-              fetch(`${BINANCE_BASE}/exchangeInfo`),
-              fetch(`${BINANCE_BASE}/ticker/24hr`)
+              fetchWithRetry(`${BINANCE_BASE}/exchangeInfo`, { signal: abortSignal }),
+              fetchWithRetry(`${BINANCE_BASE}/ticker/24hr`, { signal: abortSignal })
             ]);
 
             const infoData = await infoRes.json();
@@ -447,8 +575,8 @@
             const btcVolume24h = parseFloat(btcTicker?.quoteVolume || '0');
 
             const [btcKlines24h, btcKlines1h] = await Promise.all([
-              fetchKlines('BTCUSDT', '30m', 50),
-              fetchKlines('BTCUSDT', '5m', 15)
+              fetchKlines('BTCUSDT', '30m', 50, abortSignal),
+              fetchKlines('BTCUSDT', '5m', 15, abortSignal)
             ]);
 
             const btcCloses24h = btcKlines24h.map(k => k.close);
@@ -471,49 +599,69 @@
               .sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent));
 
             const results = [];
-            for (const t of symbolsToAnalyze) {
-              const symbol = t.symbol;
-              const isBTC = symbol === 'BTCUSDT';
-
-              let klines30m, klines5m, klines1h;
-              if (isBTC) {
-                klines30m = btcKlines24h;
-                klines5m = btcKlines1h;
-                klines1h = await fetchKlines(symbol, '1h', 8);
-              } else {
-                [klines30m, klines5m, klines1h] = await Promise.all([
-                  fetchKlines(symbol, '30m', 50),
-                  fetchKlines(symbol, '5m', 15),
-                  fetchKlines(symbol, '1h', 8)
-                ]);
-                await delay(50);
+            
+            // Process symbols in batches with controlled concurrency to avoid rate limits
+            const batchSize = 5;
+            for (let i = 0; i < symbolsToAnalyze.length; i += batchSize) {
+              if (!isMounted.current || fetchId !== lastFetchId.current) {
+                console.log('Analysis cancelled or superseded');
+                return;
               }
 
-              const symReturns24h = calculateReturns(klines30m.map(k => k.close));
-              const symReturns1h = calculateReturns(klines5m.map(k => k.close));
+              const batch = symbolsToAnalyze.slice(i, i + batchSize);
+              
+              // Fetch klines for the batch concurrently
+              const batchPromises = batch.map(async (t) => {
+                const symbol = t.symbol;
+                const isBTC = symbol === 'BTCUSDT';
 
-              const minLen24h = Math.min(symReturns24h.length, btcReturns24h.length);
-              const corr24h = isBTC ? 1 : (minLen24h >= 30 ? correlation(symReturns24h.slice(-minLen24h), btcReturns24h.slice(-minLen24h)) : 0);
+                let klines30m, klines5m, klines1h;
+                if (isBTC) {
+                  klines30m = btcKlines24h;
+                  klines5m = btcKlines1h;
+                  klines1h = await fetchKlines(symbol, '1h', 8, abortSignal);
+                } else {
+                  [klines30m, klines5m, klines1h] = await Promise.all([
+                    fetchKlines(symbol, '30m', 50, abortSignal),
+                    fetchKlines(symbol, '5m', 15, abortSignal),
+                    fetchKlines(symbol, '1h', 8, abortSignal)
+                  ]);
+                }
 
-              const minLen1h = Math.min(symReturns1h.length, btcReturns1h.length);
-              const corr1h = isBTC ? 1 : (minLen1h >= 10 ? correlation(symReturns1h.slice(-minLen1h), btcReturns1h.slice(-minLen1h)) : 0);
+                const symReturns24h = calculateReturns(klines30m.map(k => k.close));
+                const symReturns1h = calculateReturns(klines5m.map(k => k.close));
 
-              const natr2h = calculateNATR(klines30m.map(k => k.high), klines30m.map(k => k.low), klines30m.map(k => k.close), 4);
-              const vol6h = calculateParkinsonVolatility(klines1h.map(k => k.high), klines1h.map(k => k.low), 7);
+                const minLen24h = Math.min(symReturns24h.length, btcReturns24h.length);
+                const corr24h = isBTC ? 1 : (minLen24h >= 30 ? correlation(symReturns24h.slice(-minLen24h), btcReturns24h.slice(-minLen24h)) : 0);
 
-              results.push({
-                symbol,
-                change: parseFloat(t.priceChangePercent),
-                price: parseFloat(t.lastPrice),
-                volume: parseFloat(t.quoteVolume),
-                volumePct: (parseFloat(t.quoteVolume) / btcVolume24h) * 100,
-                trades: parseInt(t.count),
-                corr24h: corr24h * 100,
-                corr1h: corr1h * 100,
-                natr2h,
-                vol6h,
-                history: klines1h.map(k => k.close)
+                const minLen1h = Math.min(symReturns1h.length, btcReturns1h.length);
+                const corr1h = isBTC ? 1 : (minLen1h >= 10 ? correlation(symReturns1h.slice(-minLen1h), btcReturns1h.slice(-minLen1h)) : 0);
+
+                const natr2h = calculateNATR(klines30m.map(k => k.high), klines30m.map(k => k.low), klines30m.map(k => k.close), 4);
+                const vol6h = calculateParkinsonVolatility(klines1h.map(k => k.high), klines1h.map(k => k.low), 7);
+
+                return {
+                  symbol,
+                  change: parseFloat(t.priceChangePercent),
+                  price: parseFloat(t.lastPrice),
+                  volume: parseFloat(t.quoteVolume),
+                  volumePct: (parseFloat(t.quoteVolume) / btcVolume24h) * 100,
+                  trades: parseInt(t.count),
+                  corr24h: corr24h * 100,
+                  corr1h: corr1h * 100,
+                  natr2h,
+                  vol6h,
+                  history: klines1h.map(k => k.close)
+                };
               });
+
+              const batchResults = await Promise.all(batchPromises);
+              results.push(...batchResults.filter(r => r !== undefined));
+
+              // Add delay between batches to respect rate limits
+              if (i + batchSize < symbolsToAnalyze.length) {
+                await delay(200);
+              }
             }
 
             const finalData = {
@@ -541,8 +689,15 @@
 
             connectWebSocket(finalData.results.map((r) => r.symbol));
           } catch (err) {
+            if (err.name === 'AbortError') {
+              console.log('Analysis aborted');
+              return;
+            }
+            
             if (fetchId === lastFetchId.current && isMounted.current) {
-              setError(err instanceof Error ? err.message : 'An unknown error occurred');
+              const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+              setError(errorMessage);
+              showToast('error', `Analysis failed: ${errorMessage}`);
             }
           } finally {
             if (fetchId === lastFetchId.current && isMounted.current) {
@@ -567,10 +722,23 @@
           return () => {
             clearTimeout(timeoutId);
             clearInterval(intervalId);
+            
+            // Clean up WebSocket properly
             if (wsRef.current) {
+              if (wsRef.current.reconnectTimeout) {
+                clearTimeout(wsRef.current.reconnectTimeout);
+                wsRef.current.reconnectTimeout = null;
+              }
               wsRef.current.onclose = null;
               wsRef.current.onerror = null;
-              wsRef.current.close();
+              wsRef.current.close(1000, 'Component unmounting');
+              wsRef.current = null;
+            }
+            
+            // Abort any pending fetch requests
+            if (abortControllerRef.current) {
+              abortControllerRef.current.abort();
+              abortControllerRef.current = null;
             }
           };
         }, [settings, theme]);
@@ -591,24 +759,30 @@
           });
         }, [data, sortConfig, livePrices]);
 
-        const handleSort = (key) => {
+        // Toast notification handler with auto-dismiss
+        const showToast = useCallback((type, message) => {
+          setToast({ type, message });
+          setTimeout(() => setToast(null), 3000);
+        }, []);
+
+        const handleSort = useCallback((key) => {
           setSortConfig(prev => ({
             key,
             direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
           }));
-        };
+        }, []);
 
-        const formatCurrency = (value) => {
+        const formatCurrency = useCallback((value) => {
           if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
           if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
           return `$${value.toLocaleString()}`;
-        };
+        }, []);
 
-        const formatNumber = (value) => {
+        const formatNumber = useCallback((value) => {
           return `${(value / 1_000_000).toFixed(2)}M`;
-        };
+        }, []);
 
-        const getCorrColor = (val) => {
+        const getCorrColor = useCallback((val) => {
           const absVal = Math.abs(val);
           if (absVal < 50) {
             const intensity = (50 - absVal) / 50;
@@ -617,25 +791,24 @@
             const intensity = (absVal - 50) / 50;
             return theme === 'dark' ? `rgba(239, 68, 68, ${intensity * 0.3})` : `rgba(220, 38, 38, ${intensity * 0.2})`;
           }
-        };
+        }, [theme]);
 
-        const SortIcon = ({ column }) => {
+        const SortIcon = useCallback(({ column }) => {
           if (sortConfig.key !== column) return <ArrowUpDownIcon size={12} className="opacity-30" />;
           return sortConfig.direction === 'desc' ? <ArrowDownIcon size={12} /> : <ArrowUpIcon size={12} />;
-        };
+        }, [sortConfig.key]);
 
-        const saveSettings = (newSettings) => {
+        const saveSettings = useCallback((newSettings) => {
           setSettings(newSettings);
           setShowSettings(false);
-        };
+        }, []);
 
-        const copyToClipboard = (text) => {
+        const copyToClipboard = useCallback((text) => {
           navigator.clipboard.writeText(text);
-          setToast(`Copied ${text} to clipboard`);
-          setTimeout(() => setToast(null), 2000);
-        };
+          showToast('success', `Copied ${text} to clipboard`);
+        }, []);
 
-        const addToBlacklist = (symbol) => {
+        const addToBlacklist = useCallback((symbol) => {
           setSettings(prev => {
             if (prev.blacklist.includes(symbol)) return prev;
             const newBlacklist = [...prev.blacklist, symbol];
@@ -650,18 +823,17 @@
             };
           });
 
-          setToast(`${symbol} added to blacklist`);
-          setTimeout(() => setToast(null), 2000);
-        };
+          showToast('success', `${symbol} added to blacklist`);
+        }, []);
 
-        const removeFromBlacklist = (symbol) => {
+        const removeFromBlacklist = useCallback((symbol) => {
           setSettings(prev => ({
             ...prev,
             blacklist: prev.blacklist.filter(s => s !== symbol)
           }));
-        };
+        }, []);
 
-        const exportToCSV = () => {
+        const exportToCSV = useCallback(() => {
           if (!data || sortedResults.length === 0) return;
 
           const headers = [
@@ -701,8 +873,7 @@
           link.click();
           document.body.removeChild(link);
 
-          setToast('Exported analysis to CSV');
-          setTimeout(() => setToast(null), 2000);
+          showToast('success', 'Exported analysis to CSV');
         };
 
         return (
@@ -713,10 +884,20 @@
                   initial={{ opacity: 0, y: 50 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 50 }}
-                  className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-accent text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2 font-medium"
+                  className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-xl flex items-center gap-2 font-medium ${
+                    toast.type === 'error' 
+                      ? 'bg-down text-white' 
+                      : toast.type === 'success'
+                      ? 'bg-up text-white'
+                      : 'bg-accent text-white'
+                  }`}
                 >
-                  <CheckCircle2Icon size={18} />
-                  {toast}
+                  {toast.type === 'error' ? (
+                    <XIcon size={18} />
+                  ) : (
+                    <CheckCircle2Icon size={18} />
+                  )}
+                  {toast.message}
                 </motion.div>
               )}
             </AnimatePresence>
