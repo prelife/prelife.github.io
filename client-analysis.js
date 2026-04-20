@@ -90,7 +90,12 @@ class RequestManager {
   }
 
   createRequest(id) {
-    this.cancelRequest(id);
+    // Only create a new controller if one doesn't exist or if the existing one is aborted
+    const existing = this.activeRequests.get(id);
+    if (existing && !existing.signal.aborted) {
+      return existing;
+    }
+    
     const controller = new AbortController();
     this.activeRequests.set(id, controller);
     return controller;
@@ -100,7 +105,7 @@ class RequestManager {
     const controller = this.activeRequests.get(id);
     if (controller) {
       controller.abort();
-      this.activeRequests.delete(id);
+      // Don't delete immediately - let the error handler clean up
     }
   }
 
@@ -114,6 +119,10 @@ class RequestManager {
   isCancelled(id) {
     const controller = this.activeRequests.get(id);
     return controller?.signal.aborted ?? false;
+  }
+
+  cleanup(id) {
+    this.activeRequests.delete(id);
   }
 }
 
@@ -313,6 +322,7 @@ async function fetchKlines(symbol, interval, limit, requestId = 'default') {
   } catch (err) {
     if (err.name === 'AbortError') {
       console.log(`[Client] Request cancelled for ${symbol}`);
+      requestManager.cleanup(requestId);
       throw err;
     }
     console.warn(`[Client] Failed to fetch klines for ${symbol}:`, err.message);
@@ -356,6 +366,7 @@ async function fetchWithCache(endpoint, cacheKeyParams, requestId = 'default') {
     return data;
   } catch (err) {
     if (err.name === 'AbortError') {
+      requestManager.cleanup(requestId);
       throw err;
     }
     console.warn(`[Client] Failed to fetch ${endpoint}:`, err.message);
@@ -498,6 +509,7 @@ async function runAnalysis(params = {}, requestId = 'analysis-default') {
   } catch (error) {
     if (error.name === 'AbortError') {
       console.log('[Client] Analysis cancelled by user');
+      requestManager.cleanup(requestId);
       throw error;
     }
     throw error;
@@ -548,7 +560,10 @@ window.fetch = async function (url, options) {
       });
     } catch (error) {
       // Clear current analysis ID on error
-      currentAnalysisId = null;
+      if (currentAnalysisId) {
+        requestManager.cleanup(currentAnalysisId);
+        currentAnalysisId = null;
+      }
       
       if (error.name === 'AbortError') {
         console.log('[Client] Analysis was cancelled');
