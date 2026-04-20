@@ -3,8 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Futures Analyzer</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Binance Futures Analyzer</title>
+  <link rel="stylesheet" href="index-BqKff7pl.css">
+  
+  <!-- Polyfill 'process' for React bundles built for Node -->
+  <script>
+    if (typeof window.process === 'undefined') {
+      window.process = {
+        env: { NODE_ENV: 'production' },
+        cwd: () => '/',
+        nextTick: (fn) => setTimeout(fn, 0),
+        version: 'v18.0.0',
+        platform: 'browser'
+      };
+    }
+  </script>
+
   <style>
     #loader {
       position: fixed; inset: 0; background: var(--color-bg, #0f172a);
@@ -21,7 +35,7 @@
   <script src="client-analysis.js"></script>
   
   <!-- 2. Load your existing React bundle -->
-  <script src="react-bundle.js"></script>
+  <script src="index-BL8H-SxP.js"></script>
 
   <script>
     // Hide loader once the app is ready
