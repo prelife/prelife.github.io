@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Futures Analyzer</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    #loader {
+      position: fixed; inset: 0; background: var(--color-bg, #0f172a);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; color: var(--color-text-main, #f8fafc); font-family: sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="loader">Initializing client-side analysis engine...</div>
+  <div id="root"></div>
+
+  <!-- 1. Load client-side analysis & API interceptor FIRST -->
+  <script src="client-analysis.js"></script>
+  
+  <!-- 2. Load your existing React bundle -->
+  <script src="react-bundle.js"></script>
+
+  <script>
+    // Hide loader once the app is ready
+    window.addEventListener('load', () => {
+      const loader = document.getElementById('loader');
+      if (loader) loader.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
