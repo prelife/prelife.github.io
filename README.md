@@ -1,5 +1,7 @@
 # Futures Analyzer v1.0
 
+![Futures Analyzer Dashboard](./screenshot.png)
+
 A real-time cryptocurrency futures market analysis dashboard that helps traders identify coins moving independently of Bitcoin or showing high relative volatility.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
