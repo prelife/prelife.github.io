@@ -2,7 +2,7 @@
 
 ![Futures Analyzer Dashboard](./screenshot.png)
 
-A real-time cryptocurrency futures market analysis dashboard that helps traders identify coins moving independently of Bitcoin or showing high relative volatility.
+Real-time analysis dashboard for Binance Futures markets. Identifies coins moving independently of Bitcoin (low correlation), showing high relative volatility, or experiencing sudden price spikes.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0-green.svg)
@@ -35,16 +35,16 @@ The application runs entirely in your browser with no backend server required, m
 
 ### Core Features
 
-- **🔴 Live WebSocket Updates**: Real-time price and percentage change updates via Binance WebSocket streams
-- **📊 BTC Correlation Analysis**: Pearson correlation coefficient calculated over 24h and 1h timeframes
-- **📈 Volatility Metrics**:
-  - NATR (Normalized Average True Range) over 2h
-  - Parkinson's Realized Volatility over 6h
-- **🔍 Smart Filtering**: Filter symbols by minimum volume, trade count, and volatility thresholds
-- **⚡ Quick Copy**: Click any row to instantly copy the symbol name to clipboard
-- **📉 Visual Sparklines**: Mini charts showing 1h price trend for each symbol
-- **🌓 Dark/Light Theme**: Toggle between dark and light modes
-- **💾 Local Storage**: All settings and preferences saved locally in your browser
+- **Live WebSocket** – Real-time price and change updates via Binance streaming API
+- **Spike Detection** – Alerts on sudden price moves within a configurable rolling window. Shows the worst spike, persists for a configurable duration, and uses a quiet period to avoid false clears.
+- **Activity Score** – Composite metric of price velocity and tick density. Higher values signal momentum and attention.
+- **BTC Correlation** – Pearson coefficient over 24h and 1h windows. Spot coins decoupling from Bitcoin.
+- **Volatility** – NATR (2h) and Parkinson's Realized Volatility (6h) for multi-timeframe context.
+- **Sparklines**
+  - **Price Trend** – Last 24h price history (1h candles). Green = uptrend, red = downtrend.
+  - **Volume (14d)** – 14-day trading volume bars. Rising bars = growing interest.
+  - **Open Interest (14d)** – 14-day OI bars with flow analysis. Green = new positions, red = unwinding.
+- **Symbol Blacklist** – Hide stables or majors from analysis.
 
 ### Data & Analytics
 
@@ -193,49 +193,16 @@ Access via gear icon to configure:
 
 ### Default Settings
 
-```javascript
-{
-  minVol: 80000000,        // $80M minimum 24h volume
-  minTrades: 600000,       // 600K minimum trades
-  minNATR: 0,              // No minimum NATR by default
-  minVol6h: 0,             // No minimum Parkinson by default
-  interval: 5,             // Re-analyze every 5 minutes
-  blacklist: [             // Excluded symbols
-    "ETHUSDT",
-    "BNBUSDT",
-    "XRPUSDT",
-    "SOLUSDT",
-    "ADAUSDT",
-    "DOGEUSDT"
-  ]
-}
-```
-
-### Recommended Configurations
-
-#### Conservative (High Liquidity Only)
-```
-Min Volume: $100,000,000
-Min Trades: 1,000,000
-Interval: 10 minutes
-```
-
-#### Aggressive (More Opportunities)
-```
-Min Volume: $50,000,000
-Min Trades: 300,000
-Min NATR: 0.5%
-Interval: 3 minutes
-```
-
-#### Scalping (High Volatility Focus)
-```
-Min Volume: $30,000,000
-Min Trades: 200,000
-Min NATR: 1.0%
-Min Parkinson: 1.5%
-Interval: 2 minutes
-```
+| Setting | Default | Description |
+|---|---|---|
+| Minimum Volume | 50M | Filter by 24h quoted volume (USDT) |
+| Minimum Trades | 600K | Filter by 24h trade count |
+| Minimum NATR | 0 | Filter by Normalized Average True Range |
+| Minimum Vol 6h | 0 | Filter by Parkinson volatility |
+| Refresh Interval | 5 min | How often the analysis re-runs |
+| Spike Threshold | 3% | Alert when price moves by this % within the spike window |
+| Spike Window | 5 min | Rolling window for spike detection |
+| Alert Persistence | 5 min | How long spike alerts remain visible after detection |
 
 ### Managing Blacklist
 
@@ -261,60 +228,6 @@ Click the download icon (CSV export) to save current results:
 - Filename: `futures_analysis_YYYY-MM-DD.csv`
 - Contains all visible columns and data
 - Opens in Excel, Google Sheets, or any spreadsheet app
-
-## 📊 Metrics Explained
-
-### Price Change %
-Simple percentage change in price over the last 24 hours.
-- **Green**: Positive change (price increased)
-- **Red**: Negative change (price decreased)
-
-### 24h BTC Correlation %
-Measures how closely the symbol's price movements correlate with Bitcoin over 24 hours.
-
-- **Range**: -100% to +100%
-- **Green (Low correlation)**: Moves independently from BTC (good for diversification)
-- **Red (High correlation)**: Moves in sync with BTC
-- **Calculation**: Pearson correlation coefficient × 100
-
-**Interpretation:**
-- 0-30%: Very low correlation (independent)
-- 30-60%: Moderate correlation
-- 60-100%: High correlation (coupled)
-
-### 1h BTC Correlation %
-Same as above but calculated over the last hour only. Useful for short-term trading decisions.
-
-### 2h NATR Volatility %
-Normalized Average True Range over 2 hours, expressed as a percentage of price.
-
-- **Higher values**: More volatile (higher risk/reward)
-- **Lower values**: Less volatile (more stable)
-- **Formula**: `(ATR / Close Price) × 100`
-
-**Use case**: Identify coins with expanding/contracting volatility
-
-### 6h Parkinson Volatility %
-Parkinson's Realized Volatility over 6 hours, using high-low range.
-
-- **More accurate** than simple returns for volatility estimation
-- **Uses full price range** (high to low) not just close-to-close
-- **Higher values**: Greater intraday price swings
-
-**Use case**: Find coins with significant intraday movement potential
-
-### Volume vs BTC %
-The symbol's 24h volume as a percentage of Bitcoin's 24h volume.
-
-- Helps gauge relative liquidity
-- Higher percentage = more liquid relative to BTC
-
-### 1h Price Trend (Sparkline)
-Mini chart showing price movement over the last hour.
-
-- **Green line**: Price trending up
-- **Red line**: Price trending down
-- **Slope**: Steeper = stronger trend
 
 ## ⚠️ Important Notices
 
