@@ -1,4 +1,4 @@
-# Futures Analyzer v1.0
+# Futures Analyzer v1.4.1
 
 ![Futures Analyzer Dashboard](./screenshot.png)
 
