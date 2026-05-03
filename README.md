@@ -1,11 +1,11 @@
-# Futures Analyzer v1.4.1
+# Futures Grid v2.0.0
 
-![Futures Analyzer Dashboard](./screenshot.png)
+![Futures Grid Dashboard](./screenshot.png)
 
-Real-time analysis dashboard for Binance Futures markets. Identifies coins moving independently of Bitcoin (low correlation), showing high relative volatility, or experiencing sudden price spikes.
+Real-time analysis dashboard for crypto futures markets. Identifies coins moving independently of Bitcoin (low correlation), showing high relative volatility, or experiencing sudden price spikes.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0-green.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-green.svg)
 
 ## 📋 Table of Contents
 
@@ -22,7 +22,7 @@ Real-time analysis dashboard for Binance Futures markets. Identifies coins movin
 
 ## 🎯 Overview
 
-Futures Analyzer is a browser-based dashboard that provides real-time analysis of Binance Futures markets. It connects directly to Binance APIs from your browser to analyze and rank cryptocurrency pairs based on:
+Futures Grid is a browser-based dashboard that provides real-time analysis of crypto futures markets. It connects directly to exchange APIs from your browser to analyze and rank cryptocurrency pairs based on:
 
 - **Price performance** (24h change percentage)
 - **Correlation with Bitcoin** (24h and 1h timeframes)
@@ -35,7 +35,7 @@ The application runs entirely in your browser with no backend server required, m
 
 ### Core Features
 
-- **Live WebSocket** – Real-time price and change updates via Binance streaming API
+- **Live WebSocket** – Real-time price and change updates via exchange streaming API
 - **Spike Detection** – Alerts on sudden price moves within a configurable rolling window. Shows the worst spike, persists for a configurable duration, and uses a quiet period to avoid false clears.
 - **Activity Score** – Composite metric of price velocity and tick density. Higher values signal momentum and attention.
 - **BTC Correlation** – Pearson coefficient over 24h and 1h windows. Spot coins decoupling from Bitcoin.
@@ -56,7 +56,7 @@ The application runs entirely in your browser with no backend server required, m
 
 ## 🔧 How It Works
 
-1. **Data Collection**: The app fetches exchange info and 24h ticker data from Binance Futures API
+1. **Data Collection**: The app fetches exchange info and 24h ticker data from the exchange API
 2. **Filtering**: Symbols are filtered based on your configured criteria (volume, trades, status)
 3. **Analysis**: For each qualifying symbol, the app calculates:
    - Price correlation with BTC (24h and 1h)
@@ -71,7 +71,7 @@ The application runs entirely in your browser with no backend server required, m
 ### Prerequisites
 
 - A modern web browser (Chrome, Firefox, Edge, Safari)
-- Internet connection to access Binance APIs
+- Internet connection to access exchange APIs
 - No installation required - runs entirely in the browser
 
 ### Installation
@@ -129,7 +129,7 @@ Deploy to any static hosting service:
 ### Interface Components
 
 #### Header Bar
-- **Logo & Title**: Futures Analyzer v1.0
+- **Logo & Title**: Futures Grid v2.0.0
 - **Symbol Count**: Number of qualifying symbols found
 - **Help Button** (`?`): Opens this guide
 - **Stats Toggle**: Show/hide statistics panel
@@ -243,15 +243,15 @@ This application uses browser localStorage to save:
 
 ### ⚠️ IP Rate Limit Warning
 
-**CRITICAL**: This tool makes direct API calls to Binance from your browser using your IP address.
+**CRITICAL**: This tool makes direct API calls to the exchange from your browser using your IP address.
 
 **Risks:**
-- Excessive requests may trigger Binance rate limits
+- Excessive requests may trigger exchange rate limits
 - Your IP could be temporarily banned
 - API errors may occur during high-frequency usage
 
 **Rate Limits:**
-- Binance enforces request weight limits per IP
+- The exchange enforces request weight limits per IP
 - This app uses ~1200 weight points per full analysis
 - Standard limit: 2400 weight points per minute
 
@@ -277,6 +277,12 @@ This tool is for **informational and educational purposes only**.
 
 Cryptocurrency trading involves substantial risk of loss. Past performance does not indicate future results.
 
+### Trademark Notice
+
+This is an **unofficial, third-party tool** not affiliated with, endorsed by, or connected to Binance or any of its subsidiaries.
+
+Binance is a trademark of Binance Holdings Ltd. All other trademarks belong to their respective owners.
+
 ## 🛠 Technical Details
 
 ### Architecture
@@ -286,7 +292,7 @@ Cryptocurrency trading involves substantial risk of loss. Past performance does 
 - **Charts**: Recharts library for sparklines
 - **State Management**: React hooks (useState, useEffect, useRef)
 - **Data Persistence**: Browser localStorage
-- **Real-time Updates**: WebSocket connection to Binance
+- **Real-time Updates**: WebSocket connection to exchange
 
 ### API Endpoints Used
 
@@ -361,7 +367,7 @@ This is a pre-built static application. To modify or rebuild:
 To recreate:
 ```bash
 # Create new Vite project
-npm create vite@latest futures-analyzer -- --template react
+npm create vite@latest futures-grid -- --template react
 
 # Install dependencies
 npm install framer-motion recharts lucide-react tailwindcss
@@ -379,7 +385,7 @@ npm run build
 
 **"Analysis failed" error:**
 - Check internet connection
-- Binance API may be temporarily unavailable
+- Exchange API may be temporarily unavailable
 - Wait a few minutes and retry
 - Check browser console for details
 
@@ -450,7 +456,7 @@ SOFTWARE.
 
 ## 🤝 Contributing
 
-This is a static deployment of Futures Analyzer v1.0. For contributions or issues:
+This is a static deployment of Futures Grid v2.0.0. For contributions or issues:
 
 1. Fork the repository
 2. Create a feature branch
