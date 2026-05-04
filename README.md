@@ -1,4 +1,4 @@
-# Futures Grid v2.0.0
+# Futures Grid v2.1.0
 
 ![Futures Grid Dashboard](./screenshot.png)
 
