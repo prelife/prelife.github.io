@@ -67,7 +67,7 @@ Symbols with non-Latin characters (Chinese, Japanese, Korean, etc.) are correctl
 
 ### Utilities
 - **CSV Export** — Download full analysis results with all metrics and sparkline data. UTF-8 BOM for correct Excel compatibility.
-- **Symbol Blacklist** — Hide majors and stables from analysis. Default: ETH, BNB, XRP, SOL, ADA, DOGE, SUI, XAU, 1000PEPE.
+- **Symbol Blacklist** — Hide majors and stables from analysis. Default: ETH, BNB, XRP, SOL, ADA, DOGE, SUI, XAU, 1000PEPE, TAO, ENA.
 - **Dark/Light Theme** — Persisted to localStorage.
 - **PWA (Progressive Web App)** — Installable on supported browsers (add to home screen, standalone mode). Service worker caches the app shell for instant offline loads; API calls are never cached. Auto-updates in the background.
 - **Offline Banner** — Graceful degradation when connectivity is lost.
