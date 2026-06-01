@@ -12,9 +12,11 @@ Real-time analysis dashboard for Binance USDT-margined futures markets. Identifi
 ## Features
 
 ### Real-Time Data
-- **Live WebSocket** — Real-time price, change, and funding rate updates via Binance streaming API. Updates batched with `requestAnimationFrame` to avoid render storms across 200+ symbols. Auto-reconnect with exponential backoff, heartbeat monitoring, and visibility-aware pause/resume.
+- **Live WebSocket** — Real-time price, change, and funding rate updates via Binance streaming API. Updates batched with `requestAnimationFrame` to avoid render storms across 200+ symbols. Auto-reconnect with exponential backoff, heartbeat monitoring, and visibility-aware pause/resume. On reconnect, recent 1m klines are replayed through spike/activity detectors so no moves are missed during brief disconnects.
+- **Kline WebSocket** — Live candlestick streaming for the interactive chart. Candles update in real-time without polling.
 - **Activity Score** — Composite metric (0–100) of price velocity and tick density over a 30s rolling window. Higher values signal momentum and attention.
 - **Funding Rate** — Live from `/premiumIndex` endpoint. Color-coded: green = longs pay shorts, red = shorts pay longs, gray = near zero (±0.01%). Per-symbol `HH:MM:SS` countdown to next funding event. Sortable column.
+- **Stats Panel** — Toggleable panel showing real-time API request weight usage, qualifying symbol count, BTC reference volume, and last execution time. Rate limit warning banner appears when usage exceeds 85% of the per-minute budget, automatically deferring new analysis cycles.
 
 ### Spike Detection
 - Alerts on sudden price moves within a configurable rolling window (default 1 min, 1.5% threshold).
@@ -35,11 +37,11 @@ Real-time analysis dashboard for Binance USDT-margined futures markets. Identifi
 - **6h Range** — Direct high-low price range over 72 × 5m candles. No model assumptions.
 
 ### Interactive Candlestick Charts
-Powered by [`lightweight-charts`](https://github.com/tradingview/lightweight-charts) with drawing tools via [`lightweight-charts-drawing`](https://github.com/kuxleo/lightweight-charts-drawing):
+Powered by [`lightweight-charts`](https://github.com/tradingview/lightweight-charts) with drawing tools via [`lightweight-charts-drawing`](https://github.com/kuxleo/lightweight-charts-drawing) and [`perfect-freehand`](https://github.com/steveruizok/perfect-freehand):
 - **Multiple timeframes**: 1m, 5m, 15m, 1h, 4h, 1d
-- **Drawing tools**: trend lines, horizontal rays, vertical lines, rectangles, rotated rectangles, date-price ranges, text annotations
+- **Drawing tools**: trend lines, horizontal rays (clean, no dots/arrowheads), vertical lines, rectangles, rotated rectangles, date-price ranges, text annotations, freehand
 - **Cross-timeframe drawing persistence** — lossless anchor snapping via `_originalAnchors` (drawings survive timeframe changes and sessions)
-- **Custom timezone support** — IANA timezones via `Intl.DateTimeFormat`
+- **Custom timezone support** — IANA timezone picker with live DST-aware UTC offsets. Chart axis ticks and crosshair labels always match the selected timezone.
 - **Historical lazy-loading** — scroll left to load more candles (up to 1500 per API call), with 500 future whitespace candles for drawing anchoring
 
 ### Sparklines
@@ -54,12 +56,20 @@ Identifies Binance TradFi Perpetual contracts (tokenized real-world assets) and 
 ### Internationalization
 Translations for **English, Spanish (Español), Russian (Русский), and Chinese (中文)**. Lazy-loaded via dynamic `import()`. Covers table columns, tooltips, about modal, cookie notice, and footer.
 
+### CJK Symbol Support
+Symbols with non-Latin characters (Chinese, Japanese, Korean, etc.) are correctly filtered, displayed, and exported. System-level CJK font fallbacks (`Noto Sans CJK`, `Microsoft YaHei`, `Hiragino Sans`) ensure correct rendering across all platforms. CSV exports include a UTF-8 BOM for correct Excel compatibility.
+
+### Interface
+- **Table-only mode** — Toggle the header button to hide both the header bar and the config status line, maximizing table viewport. A floating restore button appears for quick access.
+- **Cookie consent gate** — GDPR-compliant gate before any API calls. Cannot be dismissed with Escape — user must explicitly accept or leave. Language picker in the header lets you switch translations before accepting.
+- **Toast notifications** — Non-intrusive feedback for copying symbols, blacklisting, and CSV export. Uses `aria-live="polite"` for screen reader support.
+- **Modal accessibility** — Focus trap and keyboard navigation in all modals. Escape closes settings and about dialogs.
+
 ### Utilities
-- **CSV Export** — Download full analysis results with all metrics and sparkline data.
+- **CSV Export** — Download full analysis results with all metrics and sparkline data. UTF-8 BOM for correct Excel compatibility.
 - **Symbol Blacklist** — Hide majors and stables from analysis. Default: ETH, BNB, XRP, SOL, ADA, DOGE, SUI, XAU, 1000PEPE.
-- **Rate Limit Dashboard** — Real-time Binance API weight usage with countdown timers.
 - **Dark/Light Theme** — Persisted to localStorage.
-- **PWA** — Service worker via `vite-plugin-pwa` for offline shell caching with auto-update.
+- **PWA (Progressive Web App)** — Installable on supported browsers (add to home screen, standalone mode). Service worker caches the app shell for instant offline loads; API calls are never cached. Auto-updates in the background.
 - **Offline Banner** — Graceful degradation when connectivity is lost.
 - **Error Boundary** — Catches render errors with recovery UI instead of white-screen.
 
@@ -136,16 +146,22 @@ Binance WebSocket ──→ useWebSocket() ──→ livePrices + spikeAlerts + 
                     ▼                   ▼
               Spike Detection    Activity Score
               (locked baseline)   (velocity × tick density)
+
+Binance Kline WS ──→ useKlineWebSocket() ──→ CandleChart (live candles)
 ```
 
 ### Key Design Decisions
 - **Single 5m kline fetch** serves 4 consumers (24h corr, 1h corr, NATR, 6h range) — no redundant API calls.
 - **Batched analysis** (5 concurrent requests per batch, 250ms between batches) smooths API bursts and avoids 429s.
+- **Rate limit safety margin** — analysis cycles auto-defer when estimated weight exceeds 85% of the per-minute budget, with a visible warning banner in the stats panel.
 - **Client-side rate limiter** tracks Binance request weights since CORS blocks `X-MBX-USED-WEIGHT` headers. Serialized capacity checks prevent overshoot.
 - **AbortController** cancels in-flight requests on re-analysis, preventing stale data races.
 - **Two-tier caching** — L1 in-memory LRU (500 entries, 24h TTL) + L2 IndexedDB with TTL eviction and quota-exceeded auto-suppression.
 - **rAF-batched WebSocket updates** — coalesces 1000+ ticks/sec into single state updates per frame.
 - **Structural sort sharing** — reuses index arrays and skips re-sort when order hasn't changed.
+- **Reconnect gap backfill** — on WebSocket reconnect, recent 1m klines are fetched and replayed through spike/activity detectors so no moves are missed during disconnect windows.
+- **Event dedup** — Binance can send duplicate `@ticker` messages (especially during reconnect). Deduplicated by `ticker.T` event timestamp.
+- **Debounced settings persistence** — localStorage writes throttled to 1s to avoid synchronous I/O on every slider/keystroke in the settings modal.
 
 ## Tech Stack
 
@@ -158,7 +174,7 @@ Binance WebSocket ──→ useWebSocket() ──→ livePrices + spikeAlerts + 
 - **PWA**: vite-plugin-pwa
 - **Testing**: Vitest + jsdom
 - **Linting**: ESLint + React Hooks plugin
-- **Fonts**: Inter (sans) + JetBrains Mono (mono)
+- **Fonts**: Inter (sans) + JetBrains Mono (mono) + CJK system fallbacks (Noto Sans CJK, YaHei, Hiragino Sans)
 
 ## Disclaimer
 
