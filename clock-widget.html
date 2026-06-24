@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Hours Clock Widget</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .widget-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .widget-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2d3a5a;
+        }
+
+        .widget-title {
+            color: #eee;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .current-time {
+            color: #4ecca3;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .clock-wrapper {
+            position: relative;
+            padding-top: 25px;
+        }
+
+        /* Hour labels at top */
+        .hour-labels {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 20px;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 0;
+        }
+
+        .hour-label {
+            color: #6b7a9a;
+            font-size: 10px;
+            text-align: center;
+            position: absolute;
+            transform: translateX(-50%);
+        }
+
+        /* Bars container - each exchange is a horizontal row */
+        .bars-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .exchange-row {
+            display: flex;
+            align-items: center;
+            height: 28px;
+            position: relative;
+        }
+
+        .exchange-label {
+            position: absolute;
+            left: -70px;
+            color: #aaa;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            width: 65px;
+            text-align: right;
+            padding-right: 8px;
+        }
+
+        .time-bar {
+            flex: 1;
+            height: 20px;
+            background: #2d3a5a;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+            display: block;
+        }
+
+        .time-segment {
+            position: absolute;
+            height: 100%;
+            transition: opacity 0.3s;
+        }
+
+        /* Working hours - highlighted (bright/orange) */
+        .segment-working {
+            background: linear-gradient(180deg, #ffb347 0%, #ff8c00 100%);
+            box-shadow: 0 0 8px rgba(255, 140, 0, 0.5);
+        }
+
+        /* Break time - yellow */
+        .segment-break {
+            background: linear-gradient(180deg, #ffd700 0%, #ffa500 100%);
+        }
+
+        /* Closed/non-working - green */
+        .segment-closed {
+            background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
+            opacity: 0.3;
+        }
+
+        /* Extended/after hours - light green */
+        .segment-after-hours {
+            background: linear-gradient(180deg, #58d68d 0%, #2ecc71 100%);
+            opacity: 0.6;
+        }
+
+        /* Current time indicator line */
+        .current-time-line {
+            position: absolute;
+            top: 25px;
+            bottom: 0;
+            width: 2px;
+            background: #ff4757;
+            z-index: 100;
+            pointer-events: none;
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.8);
+            transition: left 0.3s ease;
+        }
+
+        .current-time-line::before {
+            content: '▼';
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff4757;
+            font-size: 10px;
+        }
+
+        .current-time-line::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 8px;
+            background: #ff4757;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
+            50% { transform: translateX(-50%) scale(1.3); opacity: 0.7; }
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #2d3a5a;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #889;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .legend-working {
+            background: linear-gradient(180deg, #ffb347 0%, #ff8c00 100%);
+        }
+
+        .legend-break {
+            background: linear-gradient(180deg, #ffd700 0%, #ffa500 100%);
+        }
+
+        .legend-closed {
+            background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
+            opacity: 0.3;
+        }
+
+        .legend-after-hours {
+            background: linear-gradient(180deg, #58d68d 0%, #2ecc71 100%);
+            opacity: 0.6;
+        }
+
+        .legend-current {
+            background: #ff4757;
+            width: 2px;
+            height: 12px;
+        }
+
+        .config-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #2d3a5a;
+        }
+
+        .config-title {
+            color: #889;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        .exchange-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #aaa;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            accent-color: #4ecca3;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 5px;
+        }
+
+        .status-open {
+            background: #2ecc71;
+            box-shadow: 0 0 8px rgba(46, 204, 113, 0.8);
+        }
+
+        .status-closed {
+            background: #ff4757;
+            box-shadow: 0 0 8px rgba(255, 71, 87, 0.4);
+        }
+
+        /* Compact Header Widget */
+        .header-widget {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            overflow: hidden;
+        }
+
+        .header-widget .widget-title {
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .header-widget .clock-wrapper {
+            padding-top: 18px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .header-widget .exchange-label {
+            font-size: 9px;
+            width: 45px;
+            left: -50px;
+        }
+
+        .header-widget .time-bar {
+            height: 14px;
+        }
+
+        .header-widget .hour-label {
+            font-size: 8px;
+        }
+
+        .header-widget .current-time-line {
+            top: 18px;
+        }
+
+        .header-widget .exchange-row {
+            height: 20px;
+        }
+
+        /* Draggable order handles */
+        .order-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .order-btn {
+            background: #2d3a5a;
+            color: #aaa;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .order-btn:hover {
+            background: #3d4a6a;
+        }
+
+        .order-display {
+            color: #889;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Full Widget Version -->
+    <div class="widget-container">
+        <div class="widget-header">
+            <div class="widget-title">📊 Market Hours Clock</div>
+            <div class="current-time" id="currentTime">--:--:-- UTC</div>
+        </div>
+
+        <div class="clock-wrapper">
+            <div class="hour-labels" id="hourLabels"></div>
+            <div class="bars-container" id="barsContainer"></div>
+            <div class="current-time-line" id="currentTimeLine"></div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color legend-working"></div>
+                <span>Working Hours (Highlighted)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-break"></div>
+                <span>Break</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-after-hours"></div>
+                <span>Extended Hours</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-closed"></div>
+                <span>Non-Working (Dim)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color legend-current"></div>
+                <span>Current Time</span>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="config-title">Show Exchanges:</div>
+            <div class="exchange-checkboxes" id="exchangeCheckboxes"></div>
+            <div class="order-control">
+                <span class="order-display">Exchange Order:</span>
+                <button class="order-btn" onclick="moveExchangeUp()">↑ Move Selected Up</button>
+                <button class="order-btn" onclick="moveExchangeDown()">↓ Move Selected Down</button>
+                <button class="order-btn" onclick="resetOrder()">Reset Order</button>
+                <select id="orderSelect" style="background:#2d3a5a;color:#aaa;border:none;padding:4px 8px;border-radius:4px;font-size:11px;">
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <br><br>
+
+    <!-- Compact Header Version -->
+    <div class="header-widget">
+        <div class="widget-title">📈 Markets</div>
+        <div class="clock-wrapper" style="flex: 1;">
+            <div class="hour-labels" id="headerHourLabels"></div>
+            <div class="bars-container" id="headerBarsContainer"></div>
+            <div class="current-time-line" id="headerCurrentTimeLine"></div>
+        </div>
+    </div>
+
+    <script>
+        // Exchange configurations with timezone offsets from UTC
+        const exchanges = {
+            nyse: {
+                name: 'NYSE',
+                fullName: 'New York Stock Exchange',
+                timezone: 'America/New_York',
+                hours: { open: [9, 30], close: [16, 0] },
+                break: null,
+                extendedHours: { preOpen: [4, 0], afterClose: [20, 0] }
+            },
+            nasdaq: {
+                name: 'NASDAQ',
+                fullName: 'Nasdaq Stock Market',
+                timezone: 'America/New_York',
+                hours: { open: [9, 30], close: [16, 0] },
+                break: null,
+                extendedHours: { preOpen: [4, 0], afterClose: [20, 0] }
+            },
+            tse: {
+                name: 'TSE',
+                fullName: 'Tokyo Stock Exchange',
+                timezone: 'Asia/Tokyo',
+                hours: { open: [9, 0], close: [15, 30] },
+                break: { start: [11, 30], end: [12, 30] },
+                extendedHours: null
+            },
+            hkex: {
+                name: 'HKEX',
+                fullName: 'Hong Kong Stock Exchange',
+                timezone: 'Asia/Hong_Kong',
+                hours: { open: [9, 30], close: [16, 0] },
+                break: { start: [12, 0], end: [13, 0] },
+                extendedHours: null
+            },
+            sse: {
+                name: 'SSE',
+                fullName: 'Shanghai Stock Exchange',
+                timezone: 'Asia/Shanghai',
+                hours: { open: [9, 30], close: [15, 0] },
+                break: { start: [11, 30], end: [13, 0] },
+                extendedHours: null
+            },
+            sgx: {
+                name: 'SGX',
+                fullName: 'Singapore Exchange',
+                timezone: 'Asia/Singapore',
+                hours: { open: [9, 0], close: [17, 0] },
+                break: null,
+                extendedHours: null
+            },
+            krx: {
+                name: 'KRX',
+                fullName: 'Korea Exchange',
+                timezone: 'Asia/Seoul',
+                hours: { open: [9, 0], close: [15, 30] },
+                break: null,
+                extendedHours: null
+            },
+            twse: {
+                name: 'TWSE',
+                fullName: 'Taiwan Stock Exchange',
+                timezone: 'Asia/Taipei',
+                hours: { open: [9, 0], close: [13, 30] },
+                break: null,
+                extendedHours: null
+            },
+            nse: {
+                name: 'NSE',
+                fullName: 'National Stock Exchange (India)',
+                timezone: 'Asia/Kolkata',
+                hours: { open: [9, 15], close: [15, 30] },
+                break: null,
+                extendedHours: null
+            }
+        };
+
+        // Default visible exchanges and order
+        let visibleExchanges = ['nyse', 'nasdaq', 'tse', 'hkex', 'sse', 'sgx', 'krx'];
+        let exchangeOrder = ['nyse', 'nasdaq', 'tse', 'hkex', 'sse', 'sgx', 'krx', 'twse', 'nse'];
+
+        // Helper functions
+        function timeToMinutes(hours, minutes) {
+            return hours * 60 + minutes;
+        }
+
+        function minutesToTime(totalMinutes) {
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            return { hours, minutes };
+        }
+
+        function formatTime(hours, minutes) {
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+
+        function getUTCTime() {
+            const now = new Date();
+            return {
+                hours: now.getUTCHours(),
+                minutes: now.getUTCMinutes(),
+                seconds: now.getUTCSeconds(),
+                day: now.getUTCDay(),
+                totalMinutes: now.getUTCHours() * 60 + now.getUTCMinutes()
+            };
+        }
+
+        // DST-aware: compute UTC offset in minutes for a given IANA timezone
+        function getUtcOffsetMinutes(ianaTimezone, utcDate) {
+            const utcStr = utcDate.toLocaleString('en-US', { timeZone: 'UTC', hour12: false });
+            const localStr = utcDate.toLocaleString('en-US', { timeZone: ianaTimezone, hour12: false });
+            const utcParts = utcStr.split(', ')[1].split(':').map(Number);
+            const localParts = localStr.split(', ')[1].split(':').map(Number);
+            let diffH = localParts[0] - utcParts[0];
+            let diffM = localParts[1] - utcParts[1];
+            diffH += Math.floor(diffM / 60);
+            diffM = ((diffM % 60) + 60) % 60;
+            if (diffM !== 0 && diffH > 0) diffM -= 60;
+            return diffH * 60 + diffM;
+        }
+
+        function convertUTCToLocal(utcTime, ianaTimezone) {
+            const utcDate = new Date(Date.UTC(
+                new Date().getUTCFullYear(),
+                new Date().getUTCMonth(),
+                new Date().getUTCDate(),
+                utcTime.hours, utcTime.minutes, utcTime.seconds
+            ));
+            const offsetMinutes = getUtcOffsetMinutes(ianaTimezone, utcDate);
+            let localMinutes = utcTime.totalMinutes + offsetMinutes;
+            let localDay = utcTime.day;
+
+            if (localMinutes < 0) {
+                localMinutes += 24 * 60;
+                localDay = localDay === 0 ? 6 : localDay - 1;
+            } else if (localMinutes >= 24 * 60) {
+                localMinutes -= 24 * 60;
+                localDay = localDay === 6 ? 0 : localDay + 1;
+            }
+
+            return {
+                totalMinutes: localMinutes,
+                day: localDay
+            };
+        }
+
+        function isWeekend(day) {
+            return day === 0 || day === 6;
+        }
+
+        function getExchangeStatus(exchange, utcTime) {
+            const localTime = convertUTCToLocal(utcTime, exchange.timezone);
+            const isWeekendDay = isWeekend(localTime.day);
+            
+            if (isWeekendDay) {
+                return 'closed';
+            }
+
+            const openMinutes = timeToMinutes(...exchange.hours.open);
+            const closeMinutes = timeToMinutes(...exchange.hours.close);
+            
+            // Check extended hours
+            if (exchange.extendedHours) {
+                const preOpenMinutes = timeToMinutes(...exchange.extendedHours.preOpen);
+                const afterCloseMinutes = timeToMinutes(...exchange.extendedHours.afterClose);
+                
+                if (localTime.totalMinutes >= preOpenMinutes && localTime.totalMinutes < openMinutes) {
+                    return 'pre-market';
+                }
+                if (localTime.totalMinutes > closeMinutes && localTime.totalMinutes <= afterCloseMinutes) {
+                    return 'after-hours';
+                }
+            }
+
+            // Check regular hours
+            if (localTime.totalMinutes >= openMinutes && localTime.totalMinutes <= closeMinutes) {
+                // Check for break
+                if (exchange.break) {
+                    const breakStart = timeToMinutes(...exchange.break.start);
+                    const breakEnd = timeToMinutes(...exchange.break.end);
+                    
+                    if (localTime.totalMinutes >= breakStart && localTime.totalMinutes <= breakEnd) {
+                        return 'break';
+                    }
+                }
+                return 'working';
+            }
+
+            return 'closed';
+        }
+
+        function getPositionForTime(totalMinutes) {
+            return (totalMinutes / (24 * 60)) * 100;
+        }
+
+        function renderHourLabels(containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            // Show hour labels at positions 0, 3, 6, 9, 12, 15, 18, 21, 24
+            for (let hour = 0; hour <= 24; hour += 3) {
+                const label = document.createElement('div');
+                label.className = 'hour-label';
+                label.textContent = formatTime(hour, 0);
+                label.style.left = `${getPositionForTime(hour * 60)}%`;
+                container.appendChild(label);
+            }
+        }
+
+        function renderExchangeBar(exchangeKey, containerId, utcTime) {
+            const container = document.getElementById(containerId);
+            const exchange = exchanges[exchangeKey];
+            const status = getExchangeStatus(exchange, utcTime);
+            
+            const row = document.createElement('div');
+            row.className = 'exchange-row';
+            row.id = `row-${exchangeKey}-${containerId}`;
+            
+            const label = document.createElement('div');
+            label.className = 'exchange-label';
+            const statusClass = (status === 'working' || status === 'pre-market' || status === 'after-hours') ? 'status-open' : 'status-closed';
+            label.innerHTML = `${exchange.name} <span class="status-indicator ${statusClass}" id="status-${exchangeKey}-${containerId}"></span>`;
+            row.appendChild(label);
+            
+            const bar = document.createElement('div');
+            bar.className = 'time-bar';
+            bar.id = `bar-${exchangeKey}-${containerId}`;
+            
+            // Render segments for full 24 hours
+            renderSegments(bar, exchange);
+            
+            row.appendChild(bar);
+            container.appendChild(row);
+        }
+
+        function renderSegments(barElement, exchange) {
+            const segments = [];
+            const totalDayMinutes = 24 * 60;
+            
+            // Start with closed segment from midnight to first activity
+            let currentPosition = 0;
+            
+            // Extended pre-market
+            if (exchange.extendedHours) {
+                const preOpen = timeToMinutes(...exchange.extendedHours.preOpen);
+                const open = timeToMinutes(...exchange.hours.open);
+                
+                if (preOpen > currentPosition) {
+                    segments.push({ start: currentPosition, end: preOpen, type: 'closed' });
+                }
+                segments.push({ start: preOpen, end: open, type: 'after-hours' });
+                currentPosition = open;
+            }
+            
+            // Regular open
+            const open = timeToMinutes(...exchange.hours.open);
+            const close = timeToMinutes(...exchange.hours.close);
+            
+            if (exchange.break) {
+                const breakStart = timeToMinutes(...exchange.break.start);
+                const breakEnd = timeToMinutes(...exchange.break.end);
+                
+                // Morning session
+                if (breakStart > currentPosition) {
+                    segments.push({ start: currentPosition, end: breakStart, type: 'working' });
+                }
+                // Lunch break
+                segments.push({ start: breakStart, end: breakEnd, type: 'break' });
+                // Afternoon session
+                segments.push({ start: breakEnd, end: close, type: 'working' });
+                currentPosition = close;
+            } else {
+                if (open > currentPosition) {
+                    segments.push({ start: currentPosition, end: open, type: 'closed' });
+                }
+                segments.push({ start: open, end: close, type: 'working' });
+                currentPosition = close;
+            }
+            
+            // Extended after-hours
+            if (exchange.extendedHours) {
+                const afterClose = timeToMinutes(...exchange.extendedHours.afterClose);
+                segments.push({ start: currentPosition, end: afterClose, type: 'after-hours' });
+                currentPosition = afterClose;
+            }
+            
+            // Close segment from last activity to midnight
+            if (currentPosition < totalDayMinutes) {
+                segments.push({ start: currentPosition, end: totalDayMinutes, type: 'closed' });
+            }
+            
+            // Clear existing segments
+            barElement.innerHTML = '';
+            
+            segments.forEach(segment => {
+                const segmentEl = document.createElement('div');
+                segmentEl.className = `time-segment segment-${segment.type}`;
+                segmentEl.style.left = `${getPositionForTime(segment.start)}%`;
+                const width = getPositionForTime(segment.end) - getPositionForTime(segment.start);
+                segmentEl.style.width = `${width}%`;
+                barElement.appendChild(segmentEl);
+            });
+        }
+
+        function updateCurrentTimeLine(utcTime, lineId) {
+            const line = document.getElementById(lineId);
+            const position = getPositionForTime(utcTime.totalMinutes);
+            line.style.left = `${position}%`;
+        }
+
+        function updateCurrentTimeDisplay() {
+            const now = new Date();
+            const timeStr = now.toUTCString().split(' ')[4] + ' UTC';
+            document.getElementById('currentTime').textContent = timeStr;
+        }
+
+        function updateAllStatusIndicators(utcTime) {
+            visibleExchanges.forEach(key => {
+                const exchange = exchanges[key];
+                const status = getExchangeStatus(exchange, utcTime);
+                
+                ['barsContainer', 'headerBarsContainer'].forEach(containerId => {
+                    const indicator = document.getElementById(`status-${key}-${containerId}`);
+                    if (indicator) {
+                        indicator.className = `status-indicator ${(status === 'working' || status === 'pre-market' || status === 'after-hours') ? 'status-open' : 'status-closed'}`;
+                    }
+                });
+            });
+        }
+
+        function renderExchangeCheckboxes() {
+            const container = document.getElementById('exchangeCheckboxes');
+            container.innerHTML = '';
+            
+            exchangeOrder.forEach(key => {
+                const item = document.createElement('label');
+                item.className = 'checkbox-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = visibleExchanges.includes(key);
+                checkbox.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        if (!visibleExchanges.includes(key)) {
+                            visibleExchanges.push(key);
+                        }
+                    } else {
+                        visibleExchanges = visibleExchanges.filter(k => k !== key);
+                    }
+                    updateOrderSelect();
+                    renderAll();
+                });
+                
+                item.appendChild(checkbox);
+                item.appendChild(document.createTextNode(exchanges[key].name));
+                container.appendChild(item);
+            });
+        }
+
+        function updateOrderSelect() {
+            const select = document.getElementById('orderSelect');
+            select.innerHTML = '';
+            
+            visibleExchanges.forEach(key => {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = exchanges[key].name;
+                select.appendChild(option);
+            });
+        }
+
+        function moveExchangeUp() {
+            const select = document.getElementById('orderSelect');
+            const selectedValue = select.value;
+            if (!selectedValue) return;
+            
+            const currentIndex = exchangeOrder.indexOf(selectedValue);
+            if (currentIndex > 0) {
+                // Swap with previous
+                [exchangeOrder[currentIndex - 1], exchangeOrder[currentIndex]] = 
+                [exchangeOrder[currentIndex], exchangeOrder[currentIndex - 1]];
+                renderExchangeCheckboxes();
+                updateOrderSelect();
+                select.value = selectedValue;
+                renderAll();
+            }
+        }
+
+        function moveExchangeDown() {
+            const select = document.getElementById('orderSelect');
+            const selectedValue = select.value;
+            if (!selectedValue) return;
+            
+            const currentIndex = exchangeOrder.indexOf(selectedValue);
+            if (currentIndex < exchangeOrder.length - 1) {
+                // Swap with next
+                [exchangeOrder[currentIndex], exchangeOrder[currentIndex + 1]] = 
+                [exchangeOrder[currentIndex + 1], exchangeOrder[currentIndex]];
+                renderExchangeCheckboxes();
+                updateOrderSelect();
+                select.value = selectedValue;
+                renderAll();
+            }
+        }
+
+        function resetOrder() {
+            exchangeOrder = ['nyse', 'nasdaq', 'tse', 'hkex', 'sse', 'sgx', 'krx', 'twse', 'nse'];
+            visibleExchanges = ['nyse', 'nasdaq', 'tse', 'hkex', 'sse', 'sgx', 'krx'];
+            renderExchangeCheckboxes();
+            updateOrderSelect();
+            renderAll();
+        }
+
+        function renderAll() {
+            const utcTime = getUTCTime();
+            
+            // Render main widget
+            document.getElementById('barsContainer').innerHTML = '';
+            visibleExchanges.forEach(key => {
+                renderExchangeBar(key, 'barsContainer', utcTime);
+            });
+            updateCurrentTimeLine(utcTime, 'currentTimeLine');
+            
+            // Render header widget (show first 4 exchanges for compact view)
+            document.getElementById('headerBarsContainer').innerHTML = '';
+            const headerExchanges = visibleExchanges.slice(0, 4);
+            headerExchanges.forEach(key => {
+                renderExchangeBar(key, 'headerBarsContainer', utcTime);
+            });
+            updateCurrentTimeLine(utcTime, 'headerCurrentTimeLine');
+            
+            updateCurrentTimeDisplay();
+            updateAllStatusIndicators(utcTime);
+        }
+
+        // Initialize
+        renderHourLabels('hourLabels');
+        renderHourLabels('headerHourLabels');
+        renderExchangeCheckboxes();
+        updateOrderSelect();
+        renderAll();
+        
+        // Update every second
+        setInterval(() => {
+            const utcTime = getUTCTime();
+            updateCurrentTimeLine(utcTime, 'currentTimeLine');
+            updateCurrentTimeLine(utcTime, 'headerCurrentTimeLine');
+            updateCurrentTimeDisplay();
+            updateAllStatusIndicators(utcTime);
+        }, 1000);
+    </script>
+</body>
+</html>
